@@ -419,7 +419,7 @@ try:
     ARM_SPREAD_OFFSET = 0.85  # Radians (~49 degrees) base spread to clear larger head (increased for safety)
     ARM_SWING_SCALE = 0.3     # Soften arm swing to prevent clipping into body/guts
     FOREARM_SWING_SCALE = 0.4 # Soften forearm elbow bend
-    HAND_SWING_SCALE = 0.5    # Soften hand rotation
+    HAND_SWING_SCALE = 0.25   # Soften hand rotation (reduced for subtle natural motion)
 
     # Helper to sort bones by depth in hierarchy so parents are processed before their children
     def get_bone_depth(bone):
@@ -574,20 +574,6 @@ try:
                 rot = rot.slerp(mathutils.Quaternion((1.0, 0.0, 0.0, 0.0)), 1.0 - HAND_SWING_SCALE)
                 
             tgt_pbone.rotation_quaternion = rot
-            
-            # Apply base hand constraints (only W and X allowed)
-            if bone_name == "mixamorig:LeftHand":
-                # Only use W and X for animation: Y and Z must always be 0
-                rot = tgt_pbone.rotation_quaternion.copy()
-                rot.y = 0.0
-                rot.z = 0.0
-                tgt_pbone.rotation_quaternion = rot.normalized()
-            elif bone_name == "mixamorig:RightHand":
-                # Only use W and X for animation: Y and Z must always be 0
-                rot = tgt_pbone.rotation_quaternion.copy()
-                rot.y = 0.0
-                rot.z = 0.0
-                tgt_pbone.rotation_quaternion = rot.normalized()
         
         # Update Blender view layer after Pass 2 so Pass 3 queries fresh bone matrices
         bpy.context.view_layer.update()
@@ -647,20 +633,26 @@ try:
 
     # 3.5. Apply F-Curve smoothing filter to remove high-frequency jitter
     print("Smoothing animation F-Curves...")
-    def smooth_fcurves(armature, window_size=3):
+    def smooth_fcurves(armature, window_size_default=3, window_size_arms=9):
         if not armature.animation_data or not armature.animation_data.action:
             return
         action = armature.animation_data.action
         for fcurve in action.fcurves:
             if "scale" in fcurve.data_path:
                 continue
+                
+            # Use window size 9 for arms/hands to filter out jitter, and 3 for legs/hips
+            w_size = window_size_default
+            if any(name in fcurve.data_path for name in ["Arm", "ForeArm", "Hand"]):
+                w_size = window_size_arms
+                
             kp = fcurve.keyframe_points
             n = len(kp)
-            if n <= window_size:
+            if n <= w_size:
                 continue
             
             smoothed_values = []
-            half_w = window_size // 2
+            half_w = w_size // 2
             for i in range(n):
                 start = max(0, i - half_w)
                 end = min(n, i + half_w + 1)
@@ -672,7 +664,7 @@ try:
                 kp[i].handle_left[1] = smoothed_values[i]
                 kp[i].handle_right[1] = smoothed_values[i]
                 
-    smooth_fcurves(target_arm, window_size=3)
+    smooth_fcurves(target_arm, window_size_default=3, window_size_arms=9)
     print("Animation smoothing complete.")
 
     # 4. Clean up source armature

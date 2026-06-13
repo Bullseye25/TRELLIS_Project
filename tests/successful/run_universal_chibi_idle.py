@@ -649,18 +649,23 @@ try:
                 yaw = (1.0 - t) * -max_yaw
                 
             if p_neck:
-                # Extract fresh local rotation from the matrix computed in Pass 1 (no accumulation!)
-                M_local_neck = p_neck.parent.matrix.inverted() @ p_neck.matrix if p_neck.parent else p_neck.matrix
-                rot_neck_local = M_local_neck.to_quaternion()
-                rot_neck_add = mathutils.Quaternion((0.0, 1.0, 0.0), yaw * 0.35)
-                p_neck.rotation_quaternion = rot_neck_local @ rot_neck_add
+                # Rotate around armature Z-axis at the neck's pivot
+                P_neck_head = p_neck.head.copy()
+                M_trans = mathutils.Matrix.Translation(P_neck_head)
+                R_neck = mathutils.Quaternion((0.0, 0.0, 1.0), yaw * 0.35)
+                M_rot = M_trans @ R_neck.to_matrix().to_4x4() @ M_trans.inverted()
+                p_neck.matrix = M_rot @ p_neck.matrix
+                
+            # Update Blender view layer so head inherits the neck's new armature-space transform
+            bpy.context.view_layer.update()
                 
             if p_head:
-                # Extract fresh local rotation from the matrix computed in Pass 1 (no accumulation!)
-                M_local_head = p_head.parent.matrix.inverted() @ p_head.matrix if p_head.parent else p_head.matrix
-                rot_head_local = M_local_head.to_quaternion()
-                rot_head_add = mathutils.Quaternion((0.0, 1.0, 0.0), yaw * 0.65)
-                p_head.rotation_quaternion = rot_head_local @ rot_head_add
+                # Rotate around armature Z-axis at the head's pivot
+                P_head_head = p_head.head.copy()
+                M_trans = mathutils.Matrix.Translation(P_head_head)
+                R_head = mathutils.Quaternion((0.0, 0.0, 1.0), yaw * 0.65)
+                M_rot = M_trans @ R_head.to_matrix().to_4x4() @ M_trans.inverted()
+                p_head.matrix = M_rot @ p_head.matrix
 
         # Keyframe everything
         for tgt_pbone in target_arm.pose.bones:

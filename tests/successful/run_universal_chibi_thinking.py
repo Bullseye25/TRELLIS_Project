@@ -451,29 +451,29 @@ try:
             if 30 <= idx < 80:
                 t = (idx - 30) / 50.0
                 t_smooth = t * t * (3.0 - 2.0 * t)
-                pitch = t_smooth * 0.25
+                pitch = t_smooth * -0.25
             elif 80 <= idx < 110:
                 t = (idx - 80) / 30.0
                 t_smooth = t * t * (3.0 - 2.0 * t)
-                pitch = 0.25 + t_smooth * (0.1 - 0.25)
+                pitch = -0.25 + t_smooth * (-0.1 - -0.25)
             elif 110 <= idx < 140:
                 t = (idx - 110) / 30.0
                 t_smooth = t * t * (3.0 - 2.0 * t)
-                pitch = 0.1 + t_smooth * (0.25 - 0.1)
+                pitch = -0.1 + t_smooth * (-0.25 - -0.1)
             elif 140 <= idx < 170:
                 t = (idx - 140) / 30.0
                 t_smooth = t * t * (3.0 - 2.0 * t)
-                pitch = 0.25 + t_smooth * (0.1 - 0.25)
+                pitch = -0.25 + t_smooth * (-0.1 - -0.25)
             elif 170 <= idx < 200:
                 t = (idx - 170) / 30.0
                 t_smooth = t * t * (3.0 - 2.0 * t)
-                pitch = 0.1 + t_smooth * (0.25 - 0.1)
+                pitch = -0.1 + t_smooth * (-0.25 - -0.1)
             elif 200 <= idx < 220:
-                pitch = 0.25
+                pitch = -0.25
             elif 220 <= idx < 270:
                 t = (idx - 220) / 50.0
                 t_smooth = t * t * (3.0 - 2.0 * t)
-                pitch = 0.25 + t_smooth * (0.0 - 0.25)
+                pitch = -0.25 + t_smooth * (0.0 - -0.25)
             else:
                 pitch = 0.0
 

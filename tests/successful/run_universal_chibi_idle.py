@@ -55,6 +55,10 @@ try:
         keywords = ["index", "thumb", "middle", "ring", "pinky", "finger"]
         return any(k in name.lower() for k in keywords)
 
+    # Helper to check for arm/shoulder/hand/finger bones to freeze them completely
+    def is_arm_bone(name):
+        return any(k in name for k in ["Shoulder", "Arm", "ForeArm", "Hand", "Finger"]) or is_finger_bone(name)
+
     # 2. Rename bones to corrected Mixamo naming structure if they aren't already renamed
     has_mixamo = any("mixamorig" in b.name.lower() for b in target_arm.data.bones)
     if not has_mixamo:
@@ -478,8 +482,8 @@ try:
         for tgt_pbone in sorted_pose_bones:
             bone_name = tgt_pbone.name
             
-            # Exclude finger bones completely from the retargeting copy pass
-            if is_finger_bone(bone_name):
+            # Exclude arm/hand/finger bones completely from the retargeting copy pass
+            if is_arm_bone(bone_name):
                 continue
                 
             if bone_name in source_arm.pose.bones:
@@ -507,13 +511,8 @@ try:
             if bone_name != "mixamorig:Hips":
                 tgt_pbone.location = rest_locations[bone_name]
             
-            # Exclude fingers - lock at relaxed/identity rotation
-            if is_finger_bone(bone_name):
-                tgt_pbone.rotation_quaternion = mathutils.Quaternion((1.0, 0.0, 0.0, 0.0))
-                continue
-            
-            # Lock shoulders to rest pose rotation (identity) to keep arm base wide and stable
-            if bone_name in ["mixamorig:LeftShoulder", "mixamorig:RightShoulder"]:
+            # Exclude arm/shoulder/hand/finger bones - lock completely at rest/identity rotation
+            if is_arm_bone(bone_name):
                 tgt_pbone.rotation_quaternion = mathutils.Quaternion((1.0, 0.0, 0.0, 0.0))
                 continue
             
@@ -524,15 +523,7 @@ try:
             # Get current rotation to adjust
             rot = tgt_pbone.rotation_quaternion.copy()
             
-            # Damp dynamic twist
-            if bone_name in [
-                "mixamorig:LeftArm", "mixamorig:RightArm",
-                "mixamorig:LeftForeArm", "mixamorig:RightForeArm",
-                "mixamorig:LeftHand", "mixamorig:RightHand"
-            ]:
-                rot = damp_dynamic_twist_y(rot, twist_scale=0.0)
-            
-            # Apply scaling
+            # Apply scaling for legs
             if bone_name in ["mixamorig:LeftUpLeg", "mixamorig:RightUpLeg"]:
                 # Keep original thigh swing for idle
                 euler = rot.to_euler('XYZ')
@@ -547,55 +538,11 @@ try:
             elif bone_name == "mixamorig:Hips":
                 # Keep original hips rotation for idle
                 pass
-            elif bone_name in ["mixamorig:LeftArm", "mixamorig:RightArm"]:
-                rot = rot.slerp(mathutils.Quaternion((1.0, 0.0, 0.0, 0.0)), 1.0 - ARM_SWING_SCALE)
-            elif bone_name == "mixamorig:LeftForeArm":
-                rot = rot.slerp(mathutils.Quaternion((1.0, 0.0, 0.0, 0.0)), 1.0 - FOREARM_SWING_SCALE)
-                # Add outward forearm roll offset to keep hands clear of the body
-                euler = rot.to_euler('XYZ')
-                euler.z += 0.35  # Roll Left Forearm outward (increased)
-                rot = euler.to_quaternion()
-            elif bone_name == "mixamorig:RightForeArm":
-                rot = rot.slerp(mathutils.Quaternion((1.0, 0.0, 0.0, 0.0)), 1.0 - FOREARM_SWING_SCALE)
-                # Add outward forearm roll offset to keep hands clear of the body
-                euler = rot.to_euler('XYZ')
-                euler.z -= 0.35  # Roll Right Forearm outward (increased)
-                rot = euler.to_quaternion()
-            elif bone_name in ["mixamorig:LeftHand", "mixamorig:RightHand"]:
-                rot = rot.slerp(mathutils.Quaternion((1.0, 0.0, 0.0, 0.0)), 1.0 - HAND_SWING_SCALE)
                 
             tgt_pbone.rotation_quaternion = rot
         
-        # Update Blender view layer after Pass 2 so Pass 3 queries fresh bone matrices
-        bpy.context.view_layer.update()
-
-        # Pass 3: Dynamically calculate and apply arm spread offsets for collision avoidance
-        if p_left_arm and p_left_forearm and p_left_hand:
-            M_left_parent = p_left_arm.parent.matrix if p_left_arm.parent else mathutils.Matrix.Identity(4)
-            spread_left = get_dynamic_arm_spread(
-                target_arm, 'Left', M_left_parent, 
-                L_rest_left_arm, p_left_arm.rotation_quaternion.copy(),
-                L_rest_left_forearm, p_left_forearm.rotation_quaternion.copy(),
-                L_rest_left_hand, p_left_hand.rotation_quaternion.copy(),
-                torso_radius, head_radius, z_neck, clearance, ARM_SPREAD_OFFSET
-            )
-            # Apply spread rotation in quaternion space directly to local X axis
-            rot_spread = mathutils.Quaternion((1.0, 0.0, 0.0), spread_left)
-            p_left_arm.rotation_quaternion = p_left_arm.rotation_quaternion @ rot_spread
-            
-        if p_right_arm and p_right_forearm and p_right_hand:
-            M_right_parent = p_right_arm.parent.matrix if p_right_arm.parent else mathutils.Matrix.Identity(4)
-            spread_right = get_dynamic_arm_spread(
-                target_arm, 'Right', M_right_parent, 
-                L_rest_right_arm, p_right_arm.rotation_quaternion.copy(),
-                L_rest_right_forearm, p_right_forearm.rotation_quaternion.copy(),
-                L_rest_right_hand, p_right_hand.rotation_quaternion.copy(),
-                torso_radius, head_radius, z_neck, clearance, ARM_SPREAD_OFFSET
-            )
-            # Apply spread rotation in quaternion space directly to local X axis
-            rot_spread = mathutils.Quaternion((1.0, 0.0, 0.0), spread_right)
-            p_right_arm.rotation_quaternion = p_right_arm.rotation_quaternion @ rot_spread
-
+        # Update Blender view layer after Pass 2 so Pass 4 queries fresh bone matrices
+        # Pass 3 (dynamic arm spread/collision avoidance) is removed to keep the arms completely frozen in their rest pose
         bpy.context.view_layer.update()
         
         # Pass 4: Handle Hips vertical bobbing and sway translation

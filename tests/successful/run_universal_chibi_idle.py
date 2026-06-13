@@ -511,9 +511,14 @@ try:
             if bone_name != "mixamorig:Hips":
                 tgt_pbone.location = rest_locations[bone_name]
             
-            # Exclude arm/shoulder/hand/finger bones - lock completely at rest/identity rotation
+            # Exclude arm/shoulder/hand/finger bones - lock completely at rest/identity rotation or custom arm pose
             if is_arm_bone(bone_name):
-                tgt_pbone.rotation_quaternion = mathutils.Quaternion((1.0, 0.0, 0.0, 0.0))
+                if bone_name == "mixamorig:LeftArm":
+                    tgt_pbone.rotation_quaternion = mathutils.Quaternion((20.0, -2.5, 10.0, -4.5)).normalized()
+                elif bone_name == "mixamorig:RightArm":
+                    tgt_pbone.rotation_quaternion = mathutils.Quaternion((20.0, -2.5, -10.0, 4.5)).normalized()
+                else:
+                    tgt_pbone.rotation_quaternion = mathutils.Quaternion((1.0, 0.0, 0.0, 0.0))
                 continue
             
             # Exclude Neck and Head from rotation overrides in Pass 2 to prevent stale accumulation

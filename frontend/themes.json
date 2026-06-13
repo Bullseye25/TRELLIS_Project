@@ -1,0 +1,67 @@
+{
+  "1": {
+    "name": "Original 10",
+    "themes": [
+      {"name": "Classic Detective", "accessory": "oversized houndstooth detective hat and a tiny matching buttoned trench coat", "palette": "dark espresso brown, warm cream, and sharp mustard yellow"},
+      {"name": "Cyberpunk Netrunner", "accessory": "glowing neon futuristic visor and a high-collar techwear jacket", "palette": "matte black, electric cyan, and hot magenta"},
+      {"name": "Steampunk Aviator", "accessory": "brass welding goggles perched on its forehead and a leather bomber jacket with tiny gears", "palette": "deep copper, brushed bronze, and weathered leather brown"},
+      {"name": "Royal Knight", "accessory": "shiny oversized silver helmet with a plush red plume and a small chest plate", "palette": "royal blue, polished silver, and crimson red"},
+      {"name": "Streetwear Hypebeast", "accessory": "chunky retro sneakers, a backward snapback cap, and an oversized hoodie", "palette": "off-white, vibrant orange, and slate gray"},
+      {"name": "Space Astronaut", "accessory": "tinted bubble glass space helmet and a bulky tech suit with patches", "palette": "pure white, nasa blue, and safety orange accents"},
+      {"name": "Ancient Wizard", "accessory": "crooked pointed sorcerer's hat embroidered with tiny stars and a flowing robe", "palette": "deep amethyst purple, midnight blue, and metallic gold"},
+      {"name": "Retro Sushi Chef", "accessory": "traditional hachimaki headband and a clean minimalist chef tunic", "palette": "crisp white, salmon pink, and dark nori seaweed green"},
+      {"name": "Desert Nomad", "accessory": "flowing desert headscarf (shemagh) and a draped poncho with tribal patterns", "palette": "sand beige, terracotta clay, and deep sage green"},
+      {"name": "Deep Sea Diver", "accessory": "vintage brass diving helmet with a round window and heavy weighted boots", "palette": "patina teal, dark navy, and industrial yellow"}
+    ]
+  },
+  "2": {
+    "name": "Fantasy & Adventure",
+    "themes": [
+      {"name": "Forest Ranger", "accessory": "feathered archer slouch hat and a leafy wrapped leather tunic", "palette": "moss green, autumn amber, and bark brown"},
+      {"name": "Viking Berserker", "accessory": "oversized twin-horned iron helmet and a thick fur-lined shoulder mantle", "palette": "steel gray, frosted white, and deep oxblood red"},
+      {"name": "Shadow Ninja", "accessory": "wrapped face mask showing only the eyes and a sleek shinobi outfit with tied sashes", "palette": "charcoal black, dark violet, and striking crimson accents"},
+      {"name": "High-Seas Pirate", "accessory": "massive tricorn pirate hat with a skull emblem and a tattered captain's coat", "palette": "deep navy blue, weathered crimson, and tarnished gold"},
+      {"name": "Ancient Pharaoh", "accessory": "large striped Nemes headdress and a wide jeweled collar plate", "palette": "royal lapis lazuli blue, radiant gold, and turquoise teal"}
+    ]
+  },
+  "3": {
+    "name": "Modern & Urban Culture",
+    "themes": [
+      {"name": "Graffiti Artist", "accessory": "tilted bucket hat, a respirator mask hanging around the neck, and paint-splattered overalls", "palette": "acid lime green, dark violet, and asphalt gray"},
+      {"name": "DJ Soundwave", "accessory": "huge glowing over-ear headphones and a neon-accented track jacket", "palette": "midnight black, electric violet, and toxic neon green"},
+      {"name": "Techwear Urbanite", "accessory": "tactical chest rig harness, cargo jogger pants, and structural straps", "palette": "stealth matte black, olive drab, and clean slate gray"},
+      {"name": "Retro Arcade Gamer", "accessory": "pixelated pixel-art sunglasses and a vibrant color-blocked 90s windbreaker", "palette": "hot pink, electric purple, and bright arcade teal"},
+      {"name": "BMX Rider", "accessory": "sleek full-face mountain bike helmet and padded riding jerseys", "palette": "vibrant yellow, charcoal gray, and matte white"}
+    ]
+  },
+  "4": {
+    "name": "Sci-Fi & Future",
+    "themes": [
+      {"name": "Mecha Pilot", "accessory": "sleek sci-fi armored helmet with a glowing V-shaped visor and angular shoulder pads", "palette": "gundam white, striking crimson, and cobalt blue"},
+      {"name": "Synthwave Cruiser", "accessory": "retro-futuristic wireframe shutter shades and a glowing neon grid leather jacket", "palette": "sunset magenta, deep indigo, and laser cyan"},
+      {"name": "Alien Explorer", "accessory": "three-eyed biomechanical headpiece and a metallic skin-tight space suit", "palette": "iridescent pearl, toxic lime green, and deep obsidian"},
+      {"name": "Interstellar Bounty Hunter", "accessory": "battle-damaged Mandalorian-style helmet and a rugged poncho over high-tech armor", "palette": "weathered steel gray, muted olive green, and dull hazard orange"}
+    ]
+  },
+  "5": {
+    "name": "Professions & Sports",
+    "themes": [
+      {"name": "Formula Racer", "accessory": "aerodynamic racing helmet with a dark visor and a sponsors-patched racing jumpsuit", "palette": "fiery F1 red, gloss black, and crisp racing white"},
+      {"name": "Lucha Libre Wrestler", "accessory": "intricately patterned Mexican wrestling mask and a flashy champion belt buckle", "palette": "emerald green, bright sunburst yellow, and vivid scarlet"},
+      {"name": "Firefighter Hero", "accessory": "heavy yellow firefighter helmet and a reflective turn-out jacket with high-vis stripes", "palette": "dark charcoal, safety neon yellow, and fire engine red"},
+      {"name": "Cyber-Medic", "accessory": "glowing cross-emblem tactical mask and a clean futuristic lab coat with tech vials", "palette": "sterile white, soft cyan light, and clean slate blue"},
+      {"name": "Safari Explorer", "accessory": "classic pith helmet, a utility vest loaded with pockets, and a tiny rolled-up map pouch", "palette": "khaki tan, olive green, and dark chocolate brown"}
+    ]
+  },
+  "6": {
+    "name": "Whimsical & Pop Culture",
+    "themes": [
+      {"name": "Cozy Barista", "accessory": "oversized hipster beanie, a neat tied barista apron, and thick-rimmed glasses", "palette": "roasted coffee bean brown, warm milk cream, and soft sage green"},
+      {"name": "Candy Land King", "accessory": "sparkling crown shaped like hard candy and a striped peppermint-swirl regal cape", "palette": "bubblegum pink, sweet pastel blue, and mint green"},
+      {"name": "Post-Apocalyptic Scavenger", "accessory": "spiked football shoulder pads, a rusted gas mask, and asymmetrical patchwork clothing", "palette": "rust orange, dusty desert brown, and industrial iron gray"},
+      {"name": "Ice Hockey Enforcer", "accessory": "vintage grid-style hockey mask, heavy shoulder pads, and a baggy sports jersey", "palette": "ice white, deep maple maroon, and sharp navy blue"},
+      {"name": "Magical Druid", "accessory": "antlered crown woven with fresh flowers and a flowing cape made of leaves", "palette": "rich forest green, floral lavender, and soft birch wood white"},
+      {"name": "Corporate Cyber-CEO", "accessory": "glowing futuristic monocle and a sharp, high-collar asymmetrical corporate suit jacket", "palette": "executive corporate navy, crisp platinum silver, and minimalist white"}
+    ]
+  }
+}

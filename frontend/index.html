@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tripo 3D Studio - macOS Edition</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Live Diagnostic Banner for Javascript Errors -->
+    <div id="diagnostic-error-banner" style="display:none; background: #ff453a; color: white; padding: 15px; font-family: monospace; font-size: 14px; position: fixed; top: 0; left: 0; right: 0; z-index: 10000; border-bottom: 2px solid white; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+        <strong>JavaScript Error Detected:</strong>
+        <pre id="diagnostic-error-text" style="margin-top: 10px; white-space: pre-wrap; word-break: break-all;"></pre>
+        <button onclick="this.parentElement.style.display='none'" style="margin-top: 10px; padding: 5px 10px; background: white; color: black; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Close</button>
+    </div>
+    <script>
+        window.addEventListener('error', function(e) {
+            var banner = document.getElementById('diagnostic-error-banner');
+            var text = document.getElementById('diagnostic-error-text');
+            if (banner && text) {
+                banner.style.display = 'block';
+                text.textContent = e.message + '\nat ' + e.filename + ':' + e.lineno + ':' + e.colno;
+            }
+        });
+        window.addEventListener('unhandledrejection', function(e) {
+            var banner = document.getElementById('diagnostic-error-banner');
+            var text = document.getElementById('diagnostic-error-text');
+            if (banner && text) {
+                banner.style.display = 'block';
+                text.textContent = 'Unhandled Rejection: ' + (e.reason ? e.reason.message || e.reason : 'Unknown reason');
+            }
+        });
+    </script>
+
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h2>TripoSplat Studio</h2>
+                <div class="mac-dots">
+                    <span class="dot red"></span>
+                    <span class="dot yellow"></span>
+                    <span class="dot green"></span>
+                </div>
+            </div>
+            
+            <ul class="nav-links">
+                <li class="active" data-target="trellis">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+                    TRELLIS.2 Generator
+                </li>
+            </ul>
+        </nav>
+
+        <!-- Main Content Area -->
+        <main class="content-area">
+            
+            <header class="top-bar">
+                <h1 id="current-view-title">TRELLIS.2 3D Generation</h1>
+                <div class="top-bar-right" style="display: flex; align-items: center; gap: 15px;">
+                    <button id="cleanup-btn" class="btn secondary-btn" style="padding: 6px 12px; font-size: 12px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 5px; vertical-align: middle;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        Clean Output
+                    </button>
+                    <div class="status-indicator">
+                        <span class="pulse-dot active"></span>
+                        <span id="backend-status">Backend Connected</span>
+                    </div>
+                </div>
+            </header>
+
+            <div class="workspace">
+                
+                <!-- Left Panel: Input & Controls -->
+                <div class="control-panel glass-panel">
+                    
+                    <!-- Tabs -->
+                    <div class="tabs" style="display: flex; gap: 10px; margin-bottom: 20px;">
+                        <button class="tab-btn active" id="tab-ai" style="flex: 1; padding: 10px; border-radius: 8px; border: none; background: rgba(255,255,255,0.1); color: white; cursor: pointer; font-weight: 600;">AI Generator</button>
+                        <button class="tab-btn" id="tab-upload" style="flex: 1; padding: 10px; border-radius: 8px; border: none; background: transparent; color: rgba(255,255,255,0.6); cursor: pointer; font-weight: 600;">Custom Image</button>
+                    </div>
+
+                    <!-- AI Generator View -->
+                    <div id="ai-view">
+                        <!-- Step 1: Prompt Builder -->
+                        <div id="step-1-prompt" class="step-container">
+                            <h3 style="margin-top:0; font-size: 16px; margin-bottom: 15px;">Step 1: Design Character</h3>
+                            <div class="input-group" style="margin-bottom: 15px;">
+                                <label style="display: block; margin-bottom: 5px; font-size: 13px; color: #aaa;">Select Animal</label>
+                                <select id="animal-select" style="width: 100%; padding: 10px; border-radius: 6px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2); color: white;">
+                                    <option value="">Loading animals...</option>
+                                </select>
+                            </div>
+                            <div class="input-group" style="margin-bottom: 15px;">
+                                <label style="display: block; margin-bottom: 5px; font-size: 13px; color: #aaa;">Select Category</label>
+                                <select id="category-select" style="width: 100%; padding: 10px; border-radius: 6px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2); color: white;">
+                                    <option value="">Select a category</option>
+                                </select>
+                            </div>
+                            <div class="input-group" style="margin-bottom: 20px;">
+                                <label style="display: block; margin-bottom: 5px; font-size: 13px; color: #aaa;">Select Theme</label>
+                                <select id="theme-select" style="width: 100%; padding: 10px; border-radius: 6px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2); color: white;" disabled>
+                                    <option value="">First select a category</option>
+                                </select>
+                            </div>
+                            <button class="primary-btn generate-btn" id="generate-2d-btn">
+                                <span class="btn-text">Generate 2D Design</span>
+                                <div class="loader hidden" id="loader-2d"></div>
+                            </button>
+                        </div>
+
+                        <!-- Step 2: 2D Review -->
+                        <div id="step-2-review" class="step-container hidden">
+                            <h3 style="margin-top:0; font-size: 16px; margin-bottom: 15px;">Step 2: Review Design</h3>
+                            <div class="preview-box" style="width: 100%; aspect-ratio: 1; border-radius: 8px; overflow: hidden; background: #000; margin-bottom: 15px; border: 1px solid rgba(255,255,255,0.1);">
+                                <img id="preview-2d-img" style="width: 100%; height: 100%; object-fit: contain;" src="">
+                            </div>
+                            <div class="settings-group" style="margin-bottom: 15px;">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="remove-bg-2d-toggle" checked>
+                                    <span class="custom-checkbox"></span>
+                                    Remove Background
+                                </label>
+                            </div>
+                            <div style="display: flex; gap: 10px; flex-direction: column;">
+                                <button class="primary-btn generate-btn" id="proceed-3d-btn">
+                                    <span class="btn-text">Proceed to 3D Generation</span>
+                                    <div class="loader hidden" id="loader-proceed-3d"></div>
+                                </button>
+                                <div style="display: flex; gap: 10px;">
+                                    <button class="btn secondary-btn" id="regenerate-2d-btn" style="flex: 1; padding: 10px;">Regenerate</button>
+                                    <button class="btn secondary-btn" id="back-2d-btn" style="flex: 1; padding: 10px;">Go Back</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Upload View -->
+                    <div id="upload-view" class="hidden">
+                        <div class="upload-zone" id="drop-zone">
+                            <input type="file" id="file-input" accept="image/png, image/jpeg, image/webp" hidden>
+                            <div class="upload-content">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="upload-icon"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                                <h3>Drag & Drop an image here</h3>
+                                <p>or click to browse</p>
+                            </div>
+                            <img id="image-preview" class="hidden" alt="Preview">
+                            <button class="icon-btn remove-image hidden" id="remove-btn">✕</button>
+                        </div>
+                        <div class="settings-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="remove-bg-toggle" checked>
+                                <span class="custom-checkbox"></span>
+                                Remove Background
+                            </label>
+                        </div>
+                        <button class="primary-btn generate-btn" id="generate-btn">
+                            <span class="btn-text">Generate 3D Model</span>
+                            <div class="loader hidden" id="loader-3d"></div>
+                        </button>
+                    </div>
+                    
+                    <div class="progress-container hidden" id="progress-container" style="margin-top: 20px;">
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar-fill" id="progress-fill"></div>
+                        </div>
+                        <p class="progress-text" id="progress-text">Initializing...</p>
+                    </div>
+                </div>
+
+                <!-- Right Panel: 3D Viewport -->
+                <div class="viewport-panel glass-panel">
+                    <div class="viewport-placeholder" id="viewport-placeholder">
+                        <div class="placeholder-content">
+                            <div class="cube-loader">
+                                <div class="cube">
+                                  <div class="face front"></div>
+                                  <div class="face back"></div>
+                                  <div class="face right"></div>
+                                  <div class="face left"></div>
+                                  <div class="face top"></div>
+                                  <div class="face bottom"></div>
+                                </div>
+                            </div>
+                            <p>Awaiting generation...</p>
+                        </div>
+                    </div>
+                    
+                    <iframe 
+                        id="splat-viewer" 
+                        class="hidden" 
+                        style="width: 100%; height: 100%; border: none; border-radius: var(--radius-lg);"
+                        src="">
+                    </iframe>
+
+                    <div class="viewport-controls hidden" id="viewport-controls">
+                        <button class="primary-btn action-btn" id="rig-btn" style="padding: 6px 12px; margin-right: 8px;">
+                            <span style="font-size: 13px; font-weight: bold;">Auto-Rig Character</span>
+                        </button>
+                        <button class="icon-btn action-btn" id="download-glb-btn" title="Download GLB Model" style="margin-right: 8px;">
+                            <span style="font-size: 11px; font-weight: bold; margin-right: 6px;">GLB</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        </button>
+                        <button class="icon-btn action-btn" id="download-fbx-btn" title="Download FBX Model & Texture">
+                            <span style="font-size: 11px; font-weight: bold; margin-right: 6px;">FBX</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="main.js?v=20260605_v5"></script>
+</body>
+</html>

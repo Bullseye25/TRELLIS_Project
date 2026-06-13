@@ -1,0 +1,93 @@
+================================================================================
+                    COST COMPARISON & ARCHITECTURAL ADVANTAGES
+                Serverless (Modal) vs. Dedicated GPU Instances
+================================================================================
+
+This document details the financial and operational benefits of using a 
+serverless GPU architecture (via Modal) compared to a traditional always-on 
+dedicated cloud GPU instance for the Chibi 3D Studio generation pipeline.
+
+--------------------------------------------------------------------------------
+1. COST BREAKDOWN & PRICING
+--------------------------------------------------------------------------------
+
+A. Traditional Always-On Dedicated Instance (e.g. AWS EC2 g5.xlarge)
+   - hardware: 1x NVIDIA A10G (24GB VRAM)
+   - On-Demand Rate: ~$1.00 / hour
+   - Monthly Cost (24/7): 24 hours * 30 days * $1.00 = $720.00 / month
+   - RunPod/Vast.ai Dedicated (Standard L4/A10G): ~$0.35 - $0.50 / hour
+   - Monthly Cost (24/7): 24 hours * 30 days * $0.45 = $324.00 / month
+   * Note: You pay this amount regardless of whether you generate 1 model or 
+     1,000 models.
+
+B. Serverless GPU Architecture (Modal L4 Instance)
+   - Hardware: 1x NVIDIA L4 (24GB VRAM)
+   - Active GPU Execution Rate: $0.000120 / second (~$0.432 / hour)
+   - Idle Scaledown Window: 60 seconds (scaledown_window=60)
+   - Cost when idle: $0.00 / hour (automatically scales to 0)
+
+--------------------------------------------------------------------------------
+2. RUNTIME COST ESTIMATE PER CHARACTER GENERATION
+--------------------------------------------------------------------------------
+
+Each character generation flows through three GPU container stages on Modal:
+
+STAGE 1: 3D Generation (Trellis API)
+   - Average execution: 280 seconds
+   - Cost: 280s * $0.000120/s = $0.0336
+
+STAGE 2: Auto-Rigging (SkinTokens)
+   - Average execution: 25 seconds
+   - Cost: 25s * $0.000120/s = $0.0030
+
+STAGE 3: Animation retargeting & FBX export (Headless Blender)
+   - Average execution: 30 seconds
+   - Cost: 30s * $0.000120/s = $0.0036
+
+TOTAL ACTIVE PROCESSING TIME: ~335 seconds (~5.6 minutes)
+TOTAL ACTIVE GPU COST: $0.0402
+
+IDLE OVERHEAD (Container Scaledown Timeout):
+   - The container remains warm for 60 seconds after processing to handle 
+     subsequent requests instantly. If no new request arrives:
+   - Scaledown Cost: 60s * $0.000120/s = $0.0072
+
+TOTAL COST PER INDIVIDUAL GENERATION: ~$0.0474 (Under 5 Cents)
+
+--------------------------------------------------------------------------------
+3. BREAK-EVEN & VOLUME ANALYSIS
+--------------------------------------------------------------------------------
+
+To determine when a dedicated server becomes cheaper than Modal Serverless:
+
+* Target Monthly Dedicated Server Cost: $720.00 / month
+* Cost per generation on Modal: $0.0474
+* Break-Even Point: $720.00 / $0.0474 ≈ 15,189 generations / month
+* Daily Generation Volume: 15,189 / 30 ≈ 506 generations / day
+
+CONCLUSION:
+- If you generate FEWER than 506 models per day, Modal Serverless is cheaper.
+- If you generate 10 models per day:
+  - Dedicated Server: $720.00 / month
+  - Modal Serverless: 10 * 30 * $0.0474 = $14.22 / month
+  - SAVINGS: $705.78 / month (98% Cost Reduction)
+
+--------------------------------------------------------------------------------
+4. ARCHITECTURAL & OPERATIONAL BENEFITS OF SERVERLESS
+--------------------------------------------------------------------------------
+
+1. Zero Maintenance overhead:
+   No need to configure CUDA, Nvidia drivers, virtual displays (for headless 
+   Blender render/bakes), or custom Docker images. Modal handles container 
+   provisioning, networking, and volume mounts out-of-the-box.
+
+2. True Auto-Scaling:
+   If 20 users request a 3D model simultaneously, Modal automatically spins up 
+   additional GPU containers in parallel to handle the workload. A single 
+   dedicated server would queue the requests, resulting in long user wait times.
+
+3. Low Cold Start Times:
+   By storing model weights on Modal persistent network volumes (`/weights`), we 
+   bypass downloading the models on every start, keeping container spin-up times 
+   extremely low.
+================================================================================

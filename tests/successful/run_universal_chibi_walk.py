@@ -417,8 +417,8 @@ try:
     print(f"Applying Amplification: {leg_amplification:.4f}x, Sway Scale={SWAY_SCALE:.4f}")
 
     ARM_SPREAD_OFFSET = 0.85  # Radians (~49 degrees) base spread to clear larger head (increased for safety)
-    ARM_SWING_SCALE = 0.3     # Soften arm swing to prevent clipping into body/guts
-    FOREARM_SWING_SCALE = 0.4 # Soften forearm elbow bend
+    ARM_SWING_SCALE = 0.22    # Softer arm swing for stable and cute motion
+    FOREARM_SWING_SCALE = 0.32 # Softer forearm elbow bend
     HAND_SWING_SCALE = 0.25   # Soften hand rotation (reduced for subtle natural motion)
 
     # Helper to sort bones by depth in hierarchy so parents are processed before their children
@@ -654,15 +654,22 @@ try:
             smoothed_values = []
             half_w = w_size // 2
             for i in range(n):
-                start = max(0, i - half_w)
-                end = min(n, i + half_w + 1)
-                vals = [kp[j].co[1] for j in range(start, end)]
+                # Periodic wrap-around for loop continuity
+                vals = []
+                for offset in range(-half_w, half_w + 1):
+                    idx = (i + offset) % n
+                    vals.append(kp[idx].co[1])
                 smoothed_values.append(sum(vals) / len(vals))
                 
             for i in range(n):
                 kp[i].co[1] = smoothed_values[i]
                 kp[i].handle_left[1] = smoothed_values[i]
                 kp[i].handle_right[1] = smoothed_values[i]
+                
+            # Explicitly match the last frame to the first frame for a perfect loop
+            kp[-1].co[1] = kp[0].co[1]
+            kp[-1].handle_left[1] = kp[0].handle_left[1]
+            kp[-1].handle_right[1] = kp[0].handle_right[1]
                 
     smooth_fcurves(target_arm, window_size_default=3, window_size_arms=9)
     print("Animation smoothing complete.")

@@ -1,0 +1,9 @@
+cd "/Users/mac/Documents/Models Generator"
+python3 -m modal deploy TRELLIS_Project/deploy_trellis.py
+
+
+
+OR
+
+
+python3 -m modal deploy "/Users/mac/Documents/Models Generator/TRELLIS_Project/deploy_trellis.py"

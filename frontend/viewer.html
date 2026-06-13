@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GLB Viewer</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden;
+    background: radial-gradient(ellipse at 50% 60%, #1a2035 0%, #080b12 100%); }
+  #canvas-container { width: 100%; height: 100%; }
+  #error, #loading {
+    display: none;
+    position: fixed; inset: 0;
+    align-items: center; justify-content: center;
+    color: #f87171; font: 14px system-ui, sans-serif;
+    padding: 32px; text-align: center; white-space: pre-wrap;
+    z-index: 10;
+  }
+  #loading { color: #cbd5e1; }
+</style>
+</head>
+<body>
+<div id="error"></div>
+<div id="loading">Loading GLB model...</div>
+<div id="canvas-container"></div>
+
+<!-- Configuration & Three.js from CDN -->
+<script src="config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+
+<script>
+  const params      = new URLSearchParams(location.search);
+  const glbFilename = params.get('glb');
+  const isRigged    = params.get('is_rigged') === 'true';
+  const errorEl     = document.getElementById('error');
+  const loadingEl   = document.getElementById('loading');
+  const container   = document.getElementById('canvas-container');
+
+  if (!glbFilename) {
+    errorEl.style.display  = 'flex';
+    errorEl.textContent    = 'No ?glb= parameter provided.';
+  } else {
+    initViewer(glbFilename);
+  }
+
+  function initViewer(filename) {
+    loadingEl.style.display = 'flex';
+
+    // Scene
+    const scene = new THREE.Scene();
+
+    // Camera
+    const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 1000);
+    camera.position.set(0, 1, 4);
+
+    // Renderer
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(devicePixelRatio);
+    renderer.shadowMap.enabled   = true;
+    renderer.outputEncoding      = THREE.sRGBEncoding;
+    renderer.toneMapping         = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
+    container.appendChild(renderer.domElement);
+
+    // Controls
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping   = true;
+    controls.dampingFactor   = 0.05;
+    controls.autoRotate      = true;
+    controls.autoRotateSpeed = 2.0;
+    controls.target.set(0, 0.5, 0);
+
+    // Lighting
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    dirLight.position.set(5, 10, 7);
+    dirLight.castShadow = true;
+    scene.add(dirLight);
+    const fillLight = new THREE.DirectionalLight(0x8899ff, 0.3);
+    fillLight.position.set(-5, 2, -5);
+    scene.add(fillLight);
+
+    // Resolve API URL
+    let glbUrl;
+    const isLocal = params.get('local') === 'true';
+    if (isLocal) {
+      glbUrl = filename;
+    } else {
+      const baseTrellisUrl = (typeof API_URL !== 'undefined')
+        ? API_URL
+        : (location.hostname === 'localhost' ? 'http://localhost:8000' : '');
+      const baseRigUrl = (typeof RIG_API_URL !== 'undefined') ? RIG_API_URL : baseTrellisUrl;
+      const targetApi  = isRigged ? baseRigUrl : baseTrellisUrl;
+      glbUrl     = `${targetApi}/download/${filename}`;
+    }
+
+    // Load GLB with GLTFLoader
+    const loader = new THREE.GLTFLoader();
+    loader.load(
+      glbUrl,
+      (gltf) => {
+        loadingEl.style.display = 'none';
+
+        const model = gltf.scene;
+
+        // Animations
+        if (gltf.animations && gltf.animations.length > 0) {
+          const mixer  = new THREE.AnimationMixer(model);
+          const action = mixer.clipAction(gltf.animations[0]);
+          action.play();
+          window.currentMixer = mixer;
+        }
+
+        // Centre & scale
+        const box    = new THREE.Box3().setFromObject(model);
+        const size   = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+        const scale  = 2.0 / Math.max(size.x, size.y, size.z);
+        model.scale.setScalar(scale);
+        model.position.sub(center.multiplyScalar(scale));
+
+        // Shadows
+        model.traverse(child => {
+          if (child.isMesh) {
+            child.castShadow    = true;
+            child.receiveShadow = true;
+          }
+        });
+
+        scene.add(model);
+      },
+      (xhr) => {
+        const pct = xhr.total ? Math.round((xhr.loaded / xhr.total) * 100) : 0;
+        loadingEl.textContent = `Loading GLB model... ${pct}%`;
+      },
+      (err) => {
+        console.error(err);
+        loadingEl.style.display = 'none';
+        errorEl.style.display   = 'flex';
+        errorEl.textContent     = 'Failed to load GLB model.\n' + err.message;
+      }
+    );
+
+    // Resize
+    window.addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+
+    // Animate
+    const clock = new THREE.Clock();
+    (function animate() {
+      requestAnimationFrame(animate);
+      const delta = clock.getDelta();
+      if (window.currentMixer) window.currentMixer.update(delta);
+      controls.update();
+      renderer.render(scene, camera);
+    })();
+  }
+</script>
+</body>
+</html>

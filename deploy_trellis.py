@@ -198,17 +198,6 @@ try:
     if not target_arm.animation_data:
         target_arm.animation_data_create()
 
-    # Set rotation mode to Quaternion for math
-    for pbone in target_arm.pose.bones:
-        pbone.rotation_mode = 'QUATERNION'
-
-    # Store rest local locations for all bones to prevent stretching
-    rest_locations = {}
-    for pbone in target_arm.pose.bones:
-        rest_locations[pbone.name] = pbone.location.copy()
-        
-    tgt_hips_rest_loc = rest_locations["mixamorig:Hips"] if "mixamorig:Hips" in rest_locations else rest_locations[list(rest_locations.keys())[0]]
-
     # Helpers
     def is_finger_bone(name):
         keywords = ["index", "thumb", "middle", "ring", "pinky", "finger"]
@@ -354,6 +343,17 @@ try:
         for old_name, new_name in mapping.items():
             if old_name in target_arm.data.bones:
                 target_arm.data.bones[old_name].name = new_name
+
+    # Set rotation mode to Quaternion for math
+    for pbone in target_arm.pose.bones:
+        pbone.rotation_mode = 'QUATERNION'
+
+    # Store rest local locations for all bones to prevent stretching
+    rest_locations = {}
+    for pbone in target_arm.pose.bones:
+        rest_locations[pbone.name] = pbone.location.copy()
+        
+    tgt_hips_rest_loc = rest_locations["mixamorig:Hips"] if "mixamorig:Hips" in rest_locations else rest_locations[list(rest_locations.keys())[0]]
 
     # Remove Icosphere from the model
     for obj in list(bpy.data.objects):
@@ -521,16 +521,30 @@ try:
         p_left_arm = target_arm.pose.bones.get("mixamorig:LeftArm")
         p_left_forearm = target_arm.pose.bones.get("mixamorig:LeftForeArm")
         p_left_hand = target_arm.pose.bones.get("mixamorig:LeftHand")
-        L_rest_left_arm = p_left_arm.parent.matrix_local.inverted() @ p_left_arm.matrix_local if (p_left_arm and p_left_arm.parent) else mathutils.Matrix.Identity(4)
-        L_rest_left_forearm = p_left_arm.matrix_local.inverted() @ p_left_forearm.matrix_local if (p_left_arm and p_left_forearm) else mathutils.Matrix.Identity(4)
-        L_rest_left_hand = p_left_forearm.matrix_local.inverted() @ p_left_hand.matrix_local if (p_left_forearm and p_left_hand) else mathutils.Matrix.Identity(4)
+        L_rest_left_arm = mathutils.Matrix.Identity(4)
+        L_rest_left_forearm = mathutils.Matrix.Identity(4)
+        L_rest_left_hand = mathutils.Matrix.Identity(4)
+        if p_left_arm:
+            b_left_arm = target_arm.data.bones.get("mixamorig:LeftArm")
+            b_left_forearm = target_arm.data.bones.get("mixamorig:LeftForeArm")
+            b_left_hand = target_arm.data.bones.get("mixamorig:LeftHand")
+            L_rest_left_arm = b_left_arm.parent.matrix_local.inverted() @ b_left_arm.matrix_local if (b_left_arm and b_left_arm.parent) else b_left_arm.matrix_local
+            L_rest_left_forearm = b_left_arm.matrix_local.inverted() @ b_left_forearm.matrix_local
+            L_rest_left_hand = b_left_forearm.matrix_local.inverted() @ b_left_hand.matrix_local
 
         p_right_arm = target_arm.pose.bones.get("mixamorig:RightArm")
         p_right_forearm = target_arm.pose.bones.get("mixamorig:RightForeArm")
         p_right_hand = target_arm.pose.bones.get("mixamorig:RightHand")
-        L_rest_right_arm = p_right_arm.parent.matrix_local.inverted() @ p_right_arm.matrix_local if (p_right_arm and p_right_arm.parent) else mathutils.Matrix.Identity(4)
-        L_rest_right_forearm = p_right_arm.matrix_local.inverted() @ p_right_forearm.matrix_local if (p_right_arm and p_right_forearm) else mathutils.Matrix.Identity(4)
-        L_rest_right_hand = p_right_forearm.matrix_local.inverted() @ p_right_hand.matrix_local if (p_right_forearm and p_right_hand) else mathutils.Matrix.Identity(4)
+        L_rest_right_arm = mathutils.Matrix.Identity(4)
+        L_rest_right_forearm = mathutils.Matrix.Identity(4)
+        L_rest_right_hand = mathutils.Matrix.Identity(4)
+        if p_right_arm:
+            b_right_arm = target_arm.data.bones.get("mixamorig:RightArm")
+            b_right_forearm = target_arm.data.bones.get("mixamorig:RightForeArm")
+            b_right_hand = target_arm.data.bones.get("mixamorig:RightHand")
+            L_rest_right_arm = b_right_arm.parent.matrix_local.inverted() @ b_right_arm.matrix_local if (b_right_arm and b_right_arm.parent) else b_right_arm.matrix_local
+            L_rest_right_forearm = b_right_arm.matrix_local.inverted() @ b_right_forearm.matrix_local
+            L_rest_right_hand = b_right_forearm.matrix_local.inverted() @ b_right_hand.matrix_local
 
         for frame in range(start_frame, end_frame + 1):
             bpy.context.scene.frame_set(frame)

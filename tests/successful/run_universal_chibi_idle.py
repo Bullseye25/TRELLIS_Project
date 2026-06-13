@@ -610,62 +610,74 @@ try:
             p_hips.location.z = tgt_hips_rest_loc.z + (disp.z * leg_scale)
         
         # Pass 5: Add look left & right look-around overlay animation (loopable, smooth, no accumulation)
-        p_neck = target_arm.pose.bones.get("mixamorig:Neck")
+        # Update view layer first to get the correct head bone position after hip translation
+        bpy.context.view_layer.update()
+        
         p_head = target_arm.pose.bones.get("mixamorig:Head")
-        if p_neck or p_head:
+        if p_head:
             idx = frame - start_frame + 1
             
-            # Idle sequence (smooth look left/right):
-            # 1-60: Look straight (yaw = 0)
-            # 60-100: Turn Left (yaw goes from 0 to max_yaw)
-            # 100-140: Hold Left (yaw = max_yaw)
-            # 140-180: Turn back (yaw goes from max_yaw to 0)
-            # 180-220: Turn Right (yaw goes from 0 to -max_yaw)
-            # 220-260: Hold Right (yaw = -max_yaw)
-            # 260-300: Turn back (yaw goes from -max_yaw to 0)
+            # Timeline sequence (smooth look left/right & nod down):
+            # 1-30: Look straight (0.0)
+            # 30-60: Look Left (Y goes from 0.0 to 0.5)
+            # 60-80: Hold Left (Y = 0.5)
+            # 80-110: Y goes from 0.5 back to 0.0
+            # 110-130: Hold at Center
+            # 130-160: Look Right (Y goes from 0.0 to -0.5)
+            # 160-185: Hold Y at -0.5, X goes from 0.0 to -0.25
+            # 185-210: Hold Y at -0.5, X at -0.25
+            # 210-245: Y goes from -0.5 back to 0.0 (X stays at -0.25)
+            # 245-280: X goes from -0.25 back to 0.0 (Y stays at 0.0)
+            # 280-301: Look straight
             
             yaw = 0.0
-            max_yaw = 0.35   # ~20 degrees (0.35 rad)
+            pitch = 0.0
             
-            if 60 <= idx < 100:
-                t = (idx - 60) / 40.0
-                t = t * t * (3 - 2 * t)
-                yaw = t * max_yaw
-            elif 100 <= idx < 140:
-                yaw = max_yaw
-            elif 140 <= idx < 180:
-                t = (idx - 140) / 40.0
-                t = t * t * (3 - 2 * t)
-                yaw = (1.0 - t) * max_yaw
-            elif 180 <= idx < 220:
-                t = (idx - 180) / 40.0
-                t = t * t * (3 - 2 * t)
-                yaw = t * -max_yaw
-            elif 220 <= idx < 260:
-                yaw = -max_yaw
-            elif 260 <= idx < 300:
-                t = (idx - 260) / 40.0
-                t = t * t * (3 - 2 * t)
-                yaw = (1.0 - t) * -max_yaw
+            if 30 <= idx < 60:
+                t = (idx - 30) / 30.0
+                t_smooth = t * t * (3 - 2 * t)
+                yaw = t_smooth * 0.5
+            elif 60 <= idx < 80:
+                yaw = 0.5
+            elif 80 <= idx < 110:
+                t = (idx - 80) / 30.0
+                t_smooth = t * t * (3 - 2 * t)
+                yaw = (1.0 - t_smooth) * 0.5
+            elif 110 <= idx < 130:
+                yaw = 0.0
+            elif 130 <= idx < 160:
+                t = (idx - 130) / 30.0
+                t_smooth = t * t * (3 - 2 * t)
+                yaw = t_smooth * -0.5
+            elif 160 <= idx < 185:
+                yaw = -0.5
+                t = (idx - 160) / 25.0
+                t_smooth = t * t * (3 - 2 * t)
+                pitch = t_smooth * -0.25
+            elif 185 <= idx < 210:
+                yaw = -0.5
+                pitch = -0.25
+            elif 210 <= idx < 245:
+                t = (idx - 210) / 35.0
+                t_smooth = t * t * (3 - 2 * t)
+                yaw = (1.0 - t_smooth) * -0.5
+                pitch = -0.25
+            elif 245 <= idx < 280:
+                yaw = 0.0
+                t = (idx - 245) / 35.0
+                t_smooth = t * t * (3 - 2 * t)
+                pitch = (1.0 - t_smooth) * -0.25
                 
-            if p_neck:
-                # Rotate around armature Z-axis at the neck's pivot
-                P_neck_head = p_neck.head.copy()
-                M_trans = mathutils.Matrix.Translation(P_neck_head)
-                R_neck = mathutils.Quaternion((0.0, 0.0, 1.0), yaw * 0.35)
-                M_rot = M_trans @ R_neck.to_matrix().to_4x4() @ M_trans.inverted()
-                p_neck.matrix = M_rot @ p_neck.matrix
-                
-            # Update Blender view layer so head inherits the neck's new armature-space transform
-            bpy.context.view_layer.update()
-                
-            if p_head:
-                # Rotate around armature Z-axis at the head's pivot
-                P_head_head = p_head.head.copy()
-                M_trans = mathutils.Matrix.Translation(P_head_head)
-                R_head = mathutils.Quaternion((0.0, 0.0, 1.0), yaw * 0.65)
-                M_rot = M_trans @ R_head.to_matrix().to_4x4() @ M_trans.inverted()
-                p_head.matrix = M_rot @ p_head.matrix
+            # Rotate in armature space around armature Z (yaw) and X (pitch) axes at the head's pivot
+            P_head_head = p_head.head.copy()
+            M_trans = mathutils.Matrix.Translation(P_head_head)
+            
+            R_yaw = mathutils.Quaternion((0.0, 0.0, 1.0), yaw)
+            R_pitch = mathutils.Quaternion((1.0, 0.0, 0.0), pitch)
+            R_total = R_yaw @ R_pitch
+            
+            M_rot = M_trans @ R_total.to_matrix().to_4x4() @ M_trans.inverted()
+            p_head.matrix = M_rot @ p_head.matrix
 
         # Keyframe everything
         for tgt_pbone in target_arm.pose.bones:

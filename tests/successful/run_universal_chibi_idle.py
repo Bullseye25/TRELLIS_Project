@@ -517,6 +517,10 @@ try:
                 tgt_pbone.rotation_quaternion = mathutils.Quaternion((1.0, 0.0, 0.0, 0.0))
                 continue
             
+            # Exclude Neck and Head from rotation overrides in Pass 2 to prevent stale accumulation
+            if bone_name in ["mixamorig:Neck", "mixamorig:Head"]:
+                continue
+            
             # Get current rotation to adjust
             rot = tgt_pbone.rotation_quaternion.copy()
             

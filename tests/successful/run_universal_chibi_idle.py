@@ -672,8 +672,18 @@ try:
                 t_smooth = t * t * (3 - 2 * t)
                 pitch = (1.0 - t_smooth) * -0.25
                 
+            # Calculate the head's rest pose matrix in armature space relative to parent's current pose (from scratch!)
+            b_head = target_arm.data.bones.get("mixamorig:Head")
+            if p_head.parent and b_head and b_head.parent:
+                L_rest_head = b_head.parent.matrix_local.inverted() @ b_head.matrix_local
+                M_rest_armature = p_head.parent.matrix @ L_rest_head
+            elif b_head:
+                M_rest_armature = b_head.matrix_local.copy()
+            else:
+                M_rest_armature = p_head.matrix.copy()
+                
             # Rotate in armature space around armature Z (yaw) and X (pitch) axes at the head's pivot
-            P_head_head = p_head.head.copy()
+            P_head_head = M_rest_armature.to_translation()
             M_trans = mathutils.Matrix.Translation(P_head_head)
             
             R_yaw = mathutils.Quaternion((0.0, 0.0, 1.0), yaw)
@@ -681,7 +691,7 @@ try:
             R_total = R_yaw @ R_pitch
             
             M_rot = M_trans @ R_total.to_matrix().to_4x4() @ M_trans.inverted()
-            p_head.matrix = M_rot @ p_head.matrix
+            p_head.matrix = M_rot @ M_rest_armature
 
         # Keyframe everything
         for tgt_pbone in target_arm.pose.bones:

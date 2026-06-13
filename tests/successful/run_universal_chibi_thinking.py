@@ -320,8 +320,8 @@ try:
         for tgt_pbone in sorted_pose_bones:
             bone_name = tgt_pbone.name
             
-            # Exclude arm/hand/finger bones completely from the retargeting copy pass
-            if is_arm_bone(bone_name):
+            # Exclude arm/hand/finger and head bones completely from the retargeting copy pass
+            if is_arm_bone(bone_name) or bone_name == "mixamorig:Head":
                 continue
                 
             if bone_name in source_arm.pose.bones:
@@ -439,6 +439,61 @@ try:
             p_hips.location.x = tgt_hips_rest_loc.x + (disp.x * leg_scale)
             p_hips.location.y = tgt_hips_rest_loc.y + (disp.y * leg_scale)
             p_hips.location.z = tgt_hips_rest_loc.z + (disp.z * leg_scale)
+
+        # Pass 5: Add procedural head shaking/nodding animation in parallel to the arm movement
+        # Update view layer first to get the correct head bone position after hip translation
+        bpy.context.view_layer.update()
+        
+        p_head = target_arm.pose.bones.get("mixamorig:Head")
+        if p_head:
+            idx = frame - start_frame + 1
+            pitch = 0.0
+            if 30 <= idx < 80:
+                t = (idx - 30) / 50.0
+                t_smooth = t * t * (3.0 - 2.0 * t)
+                pitch = t_smooth * 0.25
+            elif 80 <= idx < 110:
+                t = (idx - 80) / 30.0
+                t_smooth = t * t * (3.0 - 2.0 * t)
+                pitch = 0.25 + t_smooth * (0.1 - 0.25)
+            elif 110 <= idx < 140:
+                t = (idx - 110) / 30.0
+                t_smooth = t * t * (3.0 - 2.0 * t)
+                pitch = 0.1 + t_smooth * (0.25 - 0.1)
+            elif 140 <= idx < 170:
+                t = (idx - 140) / 30.0
+                t_smooth = t * t * (3.0 - 2.0 * t)
+                pitch = 0.25 + t_smooth * (0.1 - 0.25)
+            elif 170 <= idx < 200:
+                t = (idx - 170) / 30.0
+                t_smooth = t * t * (3.0 - 2.0 * t)
+                pitch = 0.1 + t_smooth * (0.25 - 0.1)
+            elif 200 <= idx < 220:
+                pitch = 0.25
+            elif 220 <= idx < 270:
+                t = (idx - 220) / 50.0
+                t_smooth = t * t * (3.0 - 2.0 * t)
+                pitch = 0.25 + t_smooth * (0.0 - 0.25)
+            else:
+                pitch = 0.0
+
+            # Calculate head rest matrix relative to parent's current pose in armature space
+            b_head = target_arm.data.bones.get("mixamorig:Head")
+            if p_head.parent and b_head and b_head.parent:
+                L_rest_head = b_head.parent.matrix_local.inverted() @ b_head.matrix_local
+                M_rest_armature = p_head.parent.matrix @ L_rest_head
+            elif b_head:
+                M_rest_armature = b_head.matrix_local.copy()
+            else:
+                M_rest_armature = p_head.matrix.copy()
+
+            # Rotate around local X axis (pitch) at head pivot
+            P_head_head = M_rest_armature.to_translation()
+            M_trans = mathutils.Matrix.Translation(P_head_head)
+            R_pitch = mathutils.Quaternion((1.0, 0.0, 0.0), pitch)
+            M_rot = M_trans @ R_pitch.to_matrix().to_4x4() @ M_trans.inverted()
+            
+            p_head.matrix = M_rot @ M_rest_armature
 
         # Keyframe everything
         for tgt_pbone in target_arm.pose.bones:

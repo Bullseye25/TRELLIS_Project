@@ -609,62 +609,58 @@ try:
             p_hips.location.y = tgt_hips_rest_loc.y + (disp.y * leg_scale)
             p_hips.location.z = tgt_hips_rest_loc.z + (disp.z * leg_scale)
         
-        # Pass 5: Add look left & right look-around overlay animation (loopable, smooth)
+        # Pass 5: Add look left & right look-around overlay animation (loopable, smooth, no accumulation)
         p_neck = target_arm.pose.bones.get("mixamorig:Neck")
         p_head = target_arm.pose.bones.get("mixamorig:Head")
         if p_neck or p_head:
             idx = frame - start_frame + 1
             
-            # Idle sequence:
-            # 1-50: Straight (0.0)
-            # 50-90: Look Left
-            # 90-130: Hold Left
-            # 130-170: Look Straight
-            # 170-210: Look Right
-            # 210-250: Hold Right
-            # 250-290: Look Straight
-            # 290-301: Look Straight
+            # Idle sequence (smooth look left/right):
+            # 1-60: Look straight (yaw = 0)
+            # 60-100: Turn Left (yaw goes from 0 to max_yaw)
+            # 100-140: Hold Left (yaw = max_yaw)
+            # 140-180: Turn back (yaw goes from max_yaw to 0)
+            # 180-220: Turn Right (yaw goes from 0 to -max_yaw)
+            # 220-260: Hold Right (yaw = -max_yaw)
+            # 260-300: Turn back (yaw goes from -max_yaw to 0)
             
             yaw = 0.0
-            pitch = 0.0
-            roll = 0.0
+            max_yaw = 0.35   # ~20 degrees (0.35 rad)
             
-            max_yaw = 0.50   # ~29 degrees
-            tilt_roll = 0.08 # cute tilt
-            
-            if 50 <= idx < 90:
-                t = (idx - 50) / 40.0
+            if 60 <= idx < 100:
+                t = (idx - 60) / 40.0
                 t = t * t * (3 - 2 * t)
                 yaw = t * max_yaw
-                roll = t * -tilt_roll
-            elif 90 <= idx < 130:
+            elif 100 <= idx < 140:
                 yaw = max_yaw
-                roll = -tilt_roll
-            elif 130 <= idx < 170:
-                t = (idx - 130) / 40.0
+            elif 140 <= idx < 180:
+                t = (idx - 140) / 40.0
                 t = t * t * (3 - 2 * t)
                 yaw = (1.0 - t) * max_yaw
-                roll = (1.0 - t) * -tilt_roll
-            elif 170 <= idx < 210:
-                t = (idx - 170) / 40.0
+            elif 180 <= idx < 220:
+                t = (idx - 180) / 40.0
                 t = t * t * (3 - 2 * t)
                 yaw = t * -max_yaw
-                roll = t * tilt_roll
-            elif 210 <= idx < 250:
+            elif 220 <= idx < 260:
                 yaw = -max_yaw
-                roll = tilt_roll
-            elif 250 <= idx < 290:
-                t = (idx - 250) / 40.0
+            elif 260 <= idx < 300:
+                t = (idx - 260) / 40.0
                 t = t * t * (3 - 2 * t)
                 yaw = (1.0 - t) * -max_yaw
-                roll = (1.0 - t) * tilt_roll
                 
             if p_neck:
-                rot_neck_add = mathutils.Euler((pitch * 0.35, yaw * 0.35, roll * 0.35), 'YXZ').to_quaternion()
-                p_neck.rotation_quaternion = p_neck.rotation_quaternion @ rot_neck_add
+                # Extract fresh local rotation from the matrix computed in Pass 1 (no accumulation!)
+                M_local_neck = p_neck.parent.matrix.inverted() @ p_neck.matrix if p_neck.parent else p_neck.matrix
+                rot_neck_local = M_local_neck.to_quaternion()
+                rot_neck_add = mathutils.Quaternion((0.0, 1.0, 0.0), yaw * 0.35)
+                p_neck.rotation_quaternion = rot_neck_local @ rot_neck_add
+                
             if p_head:
-                rot_head_add = mathutils.Euler((pitch * 0.65, yaw * 0.65, roll * 0.65), 'YXZ').to_quaternion()
-                p_head.rotation_quaternion = p_head.rotation_quaternion @ rot_head_add
+                # Extract fresh local rotation from the matrix computed in Pass 1 (no accumulation!)
+                M_local_head = p_head.parent.matrix.inverted() @ p_head.matrix if p_head.parent else p_head.matrix
+                rot_head_local = M_local_head.to_quaternion()
+                rot_head_add = mathutils.Quaternion((0.0, 1.0, 0.0), yaw * 0.65)
+                p_head.rotation_quaternion = rot_head_local @ rot_head_add
 
         # Keyframe everything
         for tgt_pbone in target_arm.pose.bones:

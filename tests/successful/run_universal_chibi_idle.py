@@ -378,7 +378,7 @@ try:
 
     # Measure target torso/belly and head radius
     torso_radius, head_radius = measure_mesh_radii(target_arm)
-    clearance = 0.01 # 1cm safety clearance (arms touch/barely touch body)
+    clearance = 0.15 # 15cm safety clearance (increased to prevent body meshing)
     
     # Store neck height
     neck_bone = target_arm.data.bones.get("mixamorig:Neck")
@@ -416,7 +416,7 @@ try:
     print(f"Dynamic Scale: Target Leg={tgt_leg_len:.4f}m, Source Leg Raw={src_leg_len_raw:.4f}m, Normalized={src_leg_len:.4f}m, Leg Scale={leg_scale:.4f}")
     print(f"Applying Amplification: {leg_amplification:.4f}x")
 
-    ARM_SPREAD_OFFSET = 0.0  # Radians base spread for idle close arms
+    ARM_SPREAD_OFFSET = 0.85  # Radians (~49 degrees) base spread to clear larger head
     ARM_SWING_SCALE = 0.70    # Natural idle breathing arm swing
     FOREARM_SWING_SCALE = 0.70 # Natural forearm bend
     HAND_SWING_SCALE = 0.70   # Natural hand follow-through
@@ -547,23 +547,22 @@ try:
             elif bone_name == "mixamorig:Hips":
                 # Keep original hips rotation for idle
                 pass
-            elif bone_name == "mixamorig:LeftArm":
-                # Axis-angle rotation: W=18.0 (angle), X=-0.350, Y=5.0, Z=-4.500 (axis)
-                axis = mathutils.Vector((-0.350, 5.0, -4.500)).normalized()
-                rot = mathutils.Quaternion(axis, 18.0 * 0.017453292519943295)
-            elif bone_name == "mixamorig:RightArm":
-                # Axis-angle rotation: W=20.0 (angle), X=1.0, Y=-4.50, Z=5.00 (axis)
-                axis = mathutils.Vector((1.0, -4.50, 5.00)).normalized()
-                rot = mathutils.Quaternion(axis, 20.0 * 0.017453292519943295)
+            elif bone_name in ["mixamorig:LeftArm", "mixamorig:RightArm"]:
+                rot = rot.slerp(mathutils.Quaternion((1.0, 0.0, 0.0, 0.0)), 1.0 - ARM_SWING_SCALE)
             elif bone_name == "mixamorig:LeftForeArm":
-                # Slight elbow bend for relaxed stance
-                rot = mathutils.Euler((0.15, 0.0, 0.0), 'XYZ').to_quaternion()
+                rot = rot.slerp(mathutils.Quaternion((1.0, 0.0, 0.0, 0.0)), 1.0 - FOREARM_SWING_SCALE)
+                # Add outward forearm roll offset to keep hands clear of the body
+                euler = rot.to_euler('XYZ')
+                euler.z += 0.35  # Roll Left Forearm outward (increased)
+                rot = euler.to_quaternion()
             elif bone_name == "mixamorig:RightForeArm":
-                # Slight elbow bend for relaxed stance
-                rot = mathutils.Euler((0.15, 0.0, 0.0), 'XYZ').to_quaternion()
+                rot = rot.slerp(mathutils.Quaternion((1.0, 0.0, 0.0, 0.0)), 1.0 - FOREARM_SWING_SCALE)
+                # Add outward forearm roll offset to keep hands clear of the body
+                euler = rot.to_euler('XYZ')
+                euler.z -= 0.35  # Roll Right Forearm outward (increased)
+                rot = euler.to_quaternion()
             elif bone_name in ["mixamorig:LeftHand", "mixamorig:RightHand"]:
-                # Relaxed straight hand
-                rot = mathutils.Quaternion((1.0, 0.0, 0.0, 0.0))
+                rot = rot.slerp(mathutils.Quaternion((1.0, 0.0, 0.0, 0.0)), 1.0 - HAND_SWING_SCALE)
                 
             tgt_pbone.rotation_quaternion = rot
         

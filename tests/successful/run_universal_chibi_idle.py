@@ -548,11 +548,13 @@ try:
                 # Keep original hips rotation for idle
                 pass
             elif bone_name == "mixamorig:LeftArm":
-                # Override LeftArm rotation to point down and remain still
-                rot = mathutils.Euler((-1.4, 0.0, 0.0), 'XYZ').to_quaternion()
+                # Axis-angle rotation: W=18.0 (angle), X=-0.350, Y=5.0, Z=-4.500 (axis)
+                axis = mathutils.Vector((-0.350, 5.0, -4.500)).normalized()
+                rot = mathutils.Quaternion(axis, 18.0 * 0.017453292519943295)
             elif bone_name == "mixamorig:RightArm":
-                # Override RightArm rotation to point down and remain still
-                rot = mathutils.Euler((-1.4, 0.0, 0.0), 'XYZ').to_quaternion()
+                # Axis-angle rotation: W=20.0 (angle), X=1.0, Y=-4.50, Z=5.00 (axis)
+                axis = mathutils.Vector((1.0, -4.50, 5.00)).normalized()
+                rot = mathutils.Quaternion(axis, 20.0 * 0.017453292519943295)
             elif bone_name == "mixamorig:LeftForeArm":
                 # Slight elbow bend for relaxed stance
                 rot = mathutils.Euler((0.15, 0.0, 0.0), 'XYZ').to_quaternion()

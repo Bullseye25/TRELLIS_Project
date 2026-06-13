@@ -378,7 +378,7 @@ try:
 
     # Measure target torso/belly and head radius
     torso_radius, head_radius = measure_mesh_radii(target_arm)
-    clearance = 0.15 # 15cm safety clearance (increased to prevent body meshing)
+    clearance = 0.01 # 1cm safety clearance (arms touch/barely touch body)
     
     # Store neck height
     neck_bone = target_arm.data.bones.get("mixamorig:Neck")
@@ -416,7 +416,7 @@ try:
     print(f"Dynamic Scale: Target Leg={tgt_leg_len:.4f}m, Source Leg Raw={src_leg_len_raw:.4f}m, Normalized={src_leg_len:.4f}m, Leg Scale={leg_scale:.4f}")
     print(f"Applying Amplification: {leg_amplification:.4f}x")
 
-    ARM_SPREAD_OFFSET = 0.85  # Radians (~49 degrees) base spread to clear larger head
+    ARM_SPREAD_OFFSET = 0.0  # Radians base spread for idle close arms
     ARM_SWING_SCALE = 0.70    # Natural idle breathing arm swing
     FOREARM_SWING_SCALE = 0.70 # Natural forearm bend
     HAND_SWING_SCALE = 0.70   # Natural hand follow-through
@@ -543,22 +543,21 @@ try:
             elif bone_name == "mixamorig:Hips":
                 # Keep original hips rotation for idle
                 pass
-            elif bone_name in ["mixamorig:LeftArm", "mixamorig:RightArm"]:
-                rot = rot.slerp(mathutils.Quaternion((1.0, 0.0, 0.0, 0.0)), 1.0 - ARM_SWING_SCALE)
+            elif bone_name == "mixamorig:LeftArm":
+                # Override LeftArm rotation to point down and remain still
+                rot = mathutils.Euler((-1.4, 0.0, 0.0), 'XYZ').to_quaternion()
+            elif bone_name == "mixamorig:RightArm":
+                # Override RightArm rotation to point down and remain still
+                rot = mathutils.Euler((-1.4, 0.0, 0.0), 'XYZ').to_quaternion()
             elif bone_name == "mixamorig:LeftForeArm":
-                rot = rot.slerp(mathutils.Quaternion((1.0, 0.0, 0.0, 0.0)), 1.0 - FOREARM_SWING_SCALE)
-                # Add outward forearm roll offset to keep hands clear of the body
-                euler = rot.to_euler('XYZ')
-                euler.z += 0.35  # Roll Left Forearm outward (increased)
-                rot = euler.to_quaternion()
+                # Slight elbow bend for relaxed stance
+                rot = mathutils.Euler((0.15, 0.0, 0.0), 'XYZ').to_quaternion()
             elif bone_name == "mixamorig:RightForeArm":
-                rot = rot.slerp(mathutils.Quaternion((1.0, 0.0, 0.0, 0.0)), 1.0 - FOREARM_SWING_SCALE)
-                # Add outward forearm roll offset to keep hands clear of the body
-                euler = rot.to_euler('XYZ')
-                euler.z -= 0.35  # Roll Right Forearm outward (increased)
-                rot = euler.to_quaternion()
+                # Slight elbow bend for relaxed stance
+                rot = mathutils.Euler((0.15, 0.0, 0.0), 'XYZ').to_quaternion()
             elif bone_name in ["mixamorig:LeftHand", "mixamorig:RightHand"]:
-                rot = rot.slerp(mathutils.Quaternion((1.0, 0.0, 0.0, 0.0)), 1.0 - HAND_SWING_SCALE)
+                # Relaxed straight hand
+                rot = mathutils.Quaternion((1.0, 0.0, 0.0, 0.0))
                 
             tgt_pbone.rotation_quaternion = rot
         
@@ -610,6 +609,63 @@ try:
             p_hips.location.y = tgt_hips_rest_loc.y + (disp.y * leg_scale)
             p_hips.location.z = tgt_hips_rest_loc.z + (disp.z * leg_scale)
         
+        # Pass 5: Add look left & right look-around overlay animation (loopable, smooth)
+        p_neck = target_arm.pose.bones.get("mixamorig:Neck")
+        p_head = target_arm.pose.bones.get("mixamorig:Head")
+        if p_neck or p_head:
+            idx = frame - start_frame + 1
+            
+            # Idle sequence:
+            # 1-50: Straight (0.0)
+            # 50-90: Look Left
+            # 90-130: Hold Left
+            # 130-170: Look Straight
+            # 170-210: Look Right
+            # 210-250: Hold Right
+            # 250-290: Look Straight
+            # 290-301: Look Straight
+            
+            yaw = 0.0
+            pitch = 0.0
+            roll = 0.0
+            
+            max_yaw = 0.50   # ~29 degrees
+            tilt_roll = 0.08 # cute tilt
+            
+            if 50 <= idx < 90:
+                t = (idx - 50) / 40.0
+                t = t * t * (3 - 2 * t)
+                yaw = t * max_yaw
+                roll = t * -tilt_roll
+            elif 90 <= idx < 130:
+                yaw = max_yaw
+                roll = -tilt_roll
+            elif 130 <= idx < 170:
+                t = (idx - 130) / 40.0
+                t = t * t * (3 - 2 * t)
+                yaw = (1.0 - t) * max_yaw
+                roll = (1.0 - t) * -tilt_roll
+            elif 170 <= idx < 210:
+                t = (idx - 170) / 40.0
+                t = t * t * (3 - 2 * t)
+                yaw = t * -max_yaw
+                roll = t * tilt_roll
+            elif 210 <= idx < 250:
+                yaw = -max_yaw
+                roll = tilt_roll
+            elif 250 <= idx < 290:
+                t = (idx - 250) / 40.0
+                t = t * t * (3 - 2 * t)
+                yaw = (1.0 - t) * -max_yaw
+                roll = (1.0 - t) * tilt_roll
+                
+            if p_neck:
+                rot_neck_add = mathutils.Euler((pitch * 0.35, yaw * 0.35, roll * 0.35), 'YXZ').to_quaternion()
+                p_neck.rotation_quaternion = p_neck.rotation_quaternion @ rot_neck_add
+            if p_head:
+                rot_head_add = mathutils.Euler((pitch * 0.65, yaw * 0.65, roll * 0.65), 'YXZ').to_quaternion()
+                p_head.rotation_quaternion = p_head.rotation_quaternion @ rot_head_add
+
         # Keyframe everything
         for tgt_pbone in target_arm.pose.bones:
             tgt_pbone.keyframe_insert(data_path="rotation_quaternion", frame=frame)

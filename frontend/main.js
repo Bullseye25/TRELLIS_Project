@@ -401,50 +401,80 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            const formData = new FormData();
-            formData.append('image',     uploadedFile, uploadedFile.name);
-            formData.append('remove_bg', removeBgCheck ? removeBgCheck.checked : true);
-            formData.append('animal',    animal);
-            formData.append('theme',     theme);
+            // Convert uploadedFile to Base64 to send to local server easily
+            const reader = new FileReader();
+            const base64Promise = new Promise((resolve) => {
+                reader.onload = (e) => {
+                    const result = e.target.result;
+                    const base64 = result.startsWith('data:') ? result.split(',')[1] : result;
+                    resolve(base64);
+                };
+                reader.readAsDataURL(uploadedFile);
+            });
+            const imageB64 = await base64Promise;
 
             progressFill.style.width = '30%';
-            progressText.textContent = 'Uploading image to backend...';
+            progressText.textContent = 'Uploading image to local server...';
             await mockDelay(500);
 
-            const response = await fetch(`${_API_URL}/generate`, { method: 'POST', body: formData });
+            const response = await fetch(`${_LOCAL_SAVE_URL}/generate-3d`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    image_b64: imageB64,
+                    remove_bg: removeBgCheck ? removeBgCheck.checked : true,
+                    animal: animal,
+                    theme: theme
+                })
+            });
             if (!response.ok) throw new Error(`API ${response.status}: ${await response.text()}`);
 
             const { call_id: callId } = await response.json();
 
-            progressFill.style.width = '50%';
-            progressText.textContent = 'Processing 3D Model (Takes ~5-7 mins)...';
-
             let finalAssetUrl = null;
             while (true) {
                 await mockDelay(5000);
-                const statusRes  = await fetch(`${_API_URL}/status/${callId}`);
+                const statusRes  = await fetch(`${_LOCAL_SAVE_URL}/status-3d/${callId}`);
                 if (!statusRes.ok) throw new Error('Status check failed');
                 const statusData = await statusRes.json();
 
                 if (statusData.status === 'success') {
                     finalAssetUrl = statusData.asset_url;
-                    currentFbxUrl = statusData.fbx_url ? `${_API_URL}${statusData.fbx_url}` : null;
-                    currentTextureUrl = statusData.texture_url ? `${_API_URL}${statusData.texture_url}` : null;
+                    currentFbxUrl = statusData.fbx_url ? statusData.fbx_url : null;
+                    currentTextureUrl = statusData.texture_url ? statusData.texture_url : null;
                     break;
                 } else if (statusData.status === 'error') {
                     throw new Error(statusData.message || 'Generation failed');
                 }
-                progressText.textContent += '.';
+                
+                if (statusData.message) {
+                    progressText.textContent = statusData.message;
+                    if (statusData.message.includes('progress')) {
+                        progressFill.style.width = '35%';
+                    } else if (statusData.message.includes('ready')) {
+                        progressFill.style.width = '45%';
+                    } else if (statusData.message.includes('Preparing')) {
+                        progressFill.style.width = '55%';
+                    } else if (statusData.message.includes('updated')) {
+                        progressFill.style.width = '70%';
+                    } else if (statusData.message.includes('creating and applying')) {
+                        progressFill.style.width = '85%';
+                    } else if (statusData.message.includes('finishing up')) {
+                        progressFill.style.width = '95%';
+                    } else {
+                        progressFill.style.width = '35%';
+                    }
+                }
             }
 
             progressFill.style.width = '100%';
             progressText.textContent = 'Complete!';
             await mockDelay(400);
 
-            currentModelFilename = finalAssetUrl.split('/').pop(); // e.g. abc123.glb
-            console.log('Generated GLB filename:', currentModelFilename);
-            console.log('Generated FBX url:', currentFbxUrl);
-            console.log('Generated Texture url:', currentTextureUrl);
+            currentModelFilename = finalAssetUrl; // e.g. outputs/fox_cyberpunk_netrunner_1/fox_cyberpunk_netrunner_1.glb
+            console.log('Generated GLB relative path:', currentModelFilename);
+            console.log('Generated FBX relative url:', currentFbxUrl);
+            console.log('Generated Texture relative url:', currentTextureUrl);
             showGeneratedModel();
 
         } catch (error) {
@@ -468,17 +498,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // ─── Show GLB in viewer ───────────────────────────────────────────────────
     function showGeneratedModel(rigged = false) {
         viewportPlaceholder.classList.add('hidden');
-        const viewerUrl = `viewer.html?glb=${encodeURIComponent(currentModelFilename)}${rigged ? '&is_rigged=true' : ''}`;
+        const viewerUrl = `viewer.html?glb=${encodeURIComponent(currentModelFilename)}&local=true${rigged ? '&is_rigged=true' : ''}`;
         splatViewer.src = viewerUrl;
         splatViewer.classList.remove('hidden');
         viewportControls.classList.remove('hidden');
     }
 
     // ─── Download GLB button ──────────────────────────────────────────────────
-    downloadGlbBtn.addEventListener('click', () => {
-        if (!currentModelFilename) { alert('No GLB file ready yet.'); return; }
-        window.open(`${_API_URL}/download/${currentModelFilename}`, '_blank');
-    });
+    if (downloadGlbBtn) {
+        downloadGlbBtn.addEventListener('click', () => {
+            if (!currentModelFilename) { alert('No GLB file ready yet.'); return; }
+            window.open(`${_API_URL}/download/${currentModelFilename}`, '_blank');
+        });
+    }
 
     // ─── Download FBX button ──────────────────────────────────────────────────
     const downloadFbxBtn = document.getElementById('download-fbx-btn');

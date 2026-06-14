@@ -97,16 +97,25 @@ try:
             mapping[hips_bone.name] = "mixamorig:Hips"
             
             # The remaining center bones sorted by Z: Spine, Spine1, Spine2, Neck, Head
-            head_bone = center_bones[-1]
-            mapping[head_bone.name] = "mixamorig:Head"
-            
-            neck_bone = head_bone.parent
-            if neck_bone and neck_bone in center_bones:
-                mapping[neck_bone.name] = "mixamorig:Neck"
-            else:
+            # Find Neck and Head, ensuring Head is a child of Neck
+            fallback_head = center_bones[-1]
+            neck_bone = fallback_head.parent
+            if not (neck_bone and neck_bone in center_bones):
                 neck_bone = center_bones[-2] if len(center_bones) > 2 else None
-                if neck_bone:
-                    mapping[neck_bone.name] = "mixamorig:Neck"
+                
+            if neck_bone:
+                mapping[neck_bone.name] = "mixamorig:Neck"
+                # Find the child of neck_bone (preferring center bones) to map as Head
+                neck_children = [c for c in neck_bone.children if c in center_bones]
+                if not neck_children and neck_bone.children:
+                    neck_children = list(neck_bone.children)
+                if neck_children:
+                    head_bone = max(neck_children, key=lambda b: b.head_local.z)
+                    mapping[head_bone.name] = "mixamorig:Head"
+                else:
+                    mapping[fallback_head.name] = "mixamorig:Head"
+            else:
+                mapping[fallback_head.name] = "mixamorig:Head"
                     
             neck_idx = center_bones.index(neck_bone) if neck_bone in center_bones else len(center_bones) - 1
             spine_bones = center_bones[1:neck_idx]

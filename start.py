@@ -22,58 +22,346 @@ from pathlib import Path
 BASE_DIR = Path(__file__).parent.resolve()
 IMAGES_DIR = BASE_DIR / "images_2D"
 
+GLOBAL_API_URL = ""
+GLOBAL_RIG_URL = ""
+GENERATION_STATUS = {}
+
+def build_multipart_payload(image_bytes, remove_bg, animal, theme):
+    import uuid
+    boundary = f"----WebKitFormBoundary{uuid.uuid4().hex}"
+    parts = []
+    
+    parts.append(f"--{boundary}".encode('utf-8'))
+    parts.append(f'Content-Disposition: form-data; name="image"; filename="image.png"'.encode('utf-8'))
+    parts.append(b'Content-Type: image/png')
+    parts.append(b'')
+    parts.append(image_bytes)
+    
+    parts.append(f"--{boundary}".encode('utf-8'))
+    parts.append(f'Content-Disposition: form-data; name="remove_bg"'.encode('utf-8'))
+    parts.append(b'')
+    parts.append(str(remove_bg).lower().encode('utf-8'))
+    
+    if animal:
+        parts.append(f"--{boundary}".encode('utf-8'))
+        parts.append(f'Content-Disposition: form-data; name="animal"'.encode('utf-8'))
+        parts.append(b'')
+        parts.append(animal.encode('utf-8'))
+        
+    if theme:
+        parts.append(f"--{boundary}".encode('utf-8'))
+        parts.append(f'Content-Disposition: form-data; name="theme"'.encode('utf-8'))
+        parts.append(b'')
+        parts.append(theme.encode('utf-8'))
+        
+    parts.append(f"--{boundary}--".encode('utf-8'))
+    body = b'\r\n'.join(parts)
+    content_type = f"multipart/form-data; boundary={boundary}"
+    return body, content_type
+
+def run_animation_pipeline_background(api_url, call_id, folder_path, animal_clean, theme_clean, folder_number):
+    rel_folder = f"outputs/{animal_clean}_{theme_clean}_{folder_number}"
+    GENERATION_STATUS[call_id] = {
+        "status": "processing",
+        "message": "3D model is in progress..."
+    }
+    time.sleep(2)
+    print(f"[pipeline] Background worker started for call {call_id}...", flush=True)
+    
+    # 1. Poll for status until success
+    asset_url = None
+    fbx_url = None
+    texture_url = None
+    while True:
+        try:
+            req = urllib.request.Request(f"{api_url}/status/{call_id}")
+            with urllib.request.urlopen(req) as resp:
+                data = json.loads(resp.read().decode('utf-8'))
+                if data.get('status') == 'success':
+                    asset_url = data.get('asset_url')
+                    fbx_url = data.get('fbx_url')
+                    texture_url = data.get('texture_url')
+                    print(f"[pipeline] Generation success for call {call_id}!", flush=True)
+                    break
+                elif data.get('status') == 'error':
+                    print(f"[pipeline] Error returned from Modal: {data.get('message')}", flush=True)
+                    GENERATION_STATUS[call_id] = {
+                        "status": "error",
+                        "message": data.get('message', 'Generation failed')
+                    }
+                    return
+                elif data.get('status') == 'processing':
+                    msg = data.get('message', '3D model is in progress...')
+                    GENERATION_STATUS[call_id]["message"] = msg
+                    print(f"[pipeline] Polling: {msg}", flush=True)
+        except Exception as e:
+            print(f"[pipeline] Polling warning: {e}", flush=True)
+        time.sleep(5)
+        
+    # 2. Download rigged GLB, rigged FBX, and texture to folder
+    try:
+        glb_filename = asset_url.split('/')[-1]
+        fbx_filename = fbx_url.split('/')[-1]
+        
+        # Extract the 5-digit random number from glb_filename
+        match = re.search(r'_(\d{5})\.glb$', glb_filename)
+        if match:
+            rand_num = match.group(1)
+        else:
+            rand_num = str(folder_number)
+            
+        local_glb_name = f"{animal_clean}_{theme_clean}_{rand_num}.glb"
+        local_fbx_name = f"{animal_clean}_{theme_clean}_{rand_num}.fbx"
+        local_tex_name = f"{animal_clean}_{theme_clean}_{rand_num}_texture.png" if texture_url else None
+        
+        print(f"[pipeline] Downloading rigged GLB...", flush=True)
+        urllib.request.urlretrieve(f"{api_url}{asset_url}", str(folder_path / local_glb_name))
+        
+        print(f"[pipeline] Downloading rigged FBX...", flush=True)
+        urllib.request.urlretrieve(f"{api_url}{fbx_url}", str(folder_path / local_fbx_name))
+        
+        if texture_url:
+            print(f"[pipeline] Downloading texture...", flush=True)
+            urllib.request.urlretrieve(f"{api_url}{texture_url}", str(folder_path / local_tex_name))
+            
+        print(f"[pipeline] All base model assets downloaded to {folder_path}", flush=True)
+    except Exception as e:
+        print(f"[pipeline] Download error: {e}", flush=True)
+        GENERATION_STATUS[call_id] = {
+            "status": "error",
+            "message": f"Download failed: {e}"
+        }
+        return
+        
+    # 3. Clean outputs volume except templates and our newly generated FBX file
+    try:
+        print(f"[pipeline] Invoking clean_volume on Modal...", flush=True)
+        subprocess.run([
+            sys.executable, "-m", "modal", "run",
+            "tests/successful/merge_animations.py",
+            "--keep-fbx", fbx_filename
+        ], check=True)
+    except Exception as e:
+        print(f"[pipeline] Volume cleaning failed: {e}", flush=True)
+        
+    # 4. Run retargeting animations in parallel in cloud on Modal
+    GENERATION_STATUS[call_id]["message"] = "creating and applying animations..."
+    try:
+        print(f"[pipeline] Running retargeting animations in parallel in cloud...", flush=True)
+        p1 = subprocess.Popen([
+            sys.executable, "-m", "modal", "run",
+            "tests/successful/run_universal_chibi_walk.py",
+            "--choice", "0",
+            "--no-download"
+        ])
+        p2 = subprocess.Popen([
+            sys.executable, "-m", "modal", "run",
+            "tests/successful/run_universal_chibi_idle.py",
+            "--choice", "0",
+            "--no-download"
+        ])
+        p3 = subprocess.Popen([
+            sys.executable, "-m", "modal", "run",
+            "tests/successful/run_universal_chibi_thinking.py",
+            "--choice", "0",
+            "--no-download"
+        ])
+        
+        ret1 = p1.wait()
+        ret2 = p2.wait()
+        ret3 = p3.wait()
+        
+        if ret1 != 0 or ret2 != 0 or ret3 != 0:
+            raise RuntimeError(f"Parallel retargeting failed: walk={ret1}, idle={ret2}, thinking={ret3}")
+    except Exception as e:
+        print(f"[pipeline] Animation retargeting execution failed: {e}", flush=True)
+        GENERATION_STATUS[call_id] = {
+            "status": "error",
+            "message": f"Retargeting failed: {e}"
+        }
+        return
+
+    # 5. Invoke merge_animations on Modal!
+    GENERATION_STATUS[call_id]["message"] = "will be finishing up soon..."
+    model_id = os.path.splitext(fbx_filename)[0]
+    walk_cache_fbx = f"walk_retargeted_{fbx_filename}"
+    idle_outputs_fbx = f"{model_id}_idle.fbx"
+    thinking_outputs_fbx = f"{model_id}_thinking.fbx"
+    merged_outputs_fbx = f"{model_id}_animated.fbx"
+    
+    try:
+        print(f"[pipeline] Invoking Blender merge_anims on Modal...", flush=True)
+        subprocess.run([
+            sys.executable, "-m", "modal", "run",
+            "tests/successful/merge_animations.py",
+            "--merge",
+            "--walk-fbx", walk_cache_fbx,
+            "--idle-fbx", idle_outputs_fbx,
+            "--thinking-fbx", thinking_outputs_fbx,
+            "--output-fbx", merged_outputs_fbx
+        ], check=True)
+        
+        # 6. Download the final merged FBX file
+        local_merged_name = f"{animal_clean}_{theme_clean}_{rand_num}_animated.fbx"
+        print(f"[pipeline] Downloading merged FBX file...", flush=True)
+        urllib.request.urlretrieve(f"{api_url}/download/{merged_outputs_fbx}", str(folder_path / local_merged_name))
+        print(f"[pipeline] SUCCESS! Merged animation file saved: {folder_path / local_merged_name}", flush=True)
+        
+        GENERATION_STATUS[call_id] = {
+            "status": "success",
+            "asset_url": f"{rel_folder}/{local_glb_name}",
+            "fbx_url": f"{rel_folder}/{local_merged_name}",
+            "texture_url": f"{rel_folder}/{local_tex_name}" if local_tex_name else None
+        }
+        
+        # 7. Wait 5 seconds, then perform cleanup of intermediate animation files on Modal
+        print(f"[pipeline] Waiting 5 seconds before cleanup...", flush=True)
+        time.sleep(5)
+        print(f"[pipeline] Performing cleanup of intermediate animation files on Modal...", flush=True)
+        try:
+            subprocess.run([
+                sys.executable, "-m", "modal", "run",
+                "tests/successful/merge_animations.py",
+                "--cleanup",
+                "--walk-fbx", walk_cache_fbx,
+                "--idle-fbx", idle_outputs_fbx,
+                "--thinking-fbx", thinking_outputs_fbx
+            ], check=True)
+            print(f"[pipeline] Intermediate animation files cleaned up successfully on Modal.", flush=True)
+        except Exception as cleanup_err:
+            print(f"[pipeline] Warning: Cleanup of intermediate animation files failed: {cleanup_err}", flush=True)
+            
+    except Exception as e:
+        print(f"[pipeline] Blending/Merging failed: {e}", flush=True)
+        GENERATION_STATUS[call_id] = {
+            "status": "error",
+            "message": f"Merging failed: {e}"
+        }
+
 class ImageSaveHandler(http.server.BaseHTTPRequestHandler):
     """Tiny HTTP handler that saves 2D character images to disk."""
 
-    # ── CORS pre-flight ───────────────────────────────────────────────────────
     def do_OPTIONS(self):
         self._cors(200)
 
-    # ── Save endpoint ─────────────────────────────────────────────────────────
-    def do_POST(self):
-        if self.path != '/save-image':
+    def do_GET(self):
+        if self.path.startswith('/status-3d/'):
+            call_id = self.path.split('/')[-1]
+            status = GENERATION_STATUS.get(call_id, {
+                "status": "processing",
+                "message": "3D model is in progress..."
+            })
+            self._cors(200, json.dumps(status).encode())
+        else:
             self._cors(404)
-            return
 
-        try:
-            length = int(self.headers.get('Content-Length', 0))
-            body   = json.loads(self.rfile.read(length))
+    def do_POST(self):
+        if self.path == '/save-image':
+            try:
+                length = int(self.headers.get('Content-Length', 0))
+                body   = json.loads(self.rfile.read(length))
 
-            animal     = body.get('animal', 'creature').strip()
-            theme_name = body.get('theme_name', 'unknown').strip()
-            prompt     = body.get('prompt', '')
-            image_b64  = body.get('image_b64', '')   # pure base64, no data-URI prefix
+                animal     = body.get('animal', 'creature').strip()
+                theme_name = body.get('theme_name', 'unknown').strip()
+                prompt     = body.get('prompt', '')
+                image_b64  = body.get('image_b64', '')
 
-            # Build a safe filename  e.g.  20260605_215802_Fox_Cyberpunk_Netrunner
-            ts   = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-            slug = f"{ts}_{animal}_{theme_name}".replace(' ', '_')[:120]
+                ts   = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+                slug = f"{ts}_{animal}_{theme_name}".replace(' ', '_')[:120]
 
-            IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+                IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 
-            # Save PNG
-            if image_b64:
-                if image_b64.startswith('http://') or image_b64.startswith('https://'):
-                    print(f"[images_2D] Downloading from URL: {image_b64}", flush=True)
-                    req = urllib.request.Request(
-                        image_b64,
-                        headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
-                    )
-                    with urllib.request.urlopen(req) as response:
-                        img_bytes = response.read()
-                else:
-                    img_bytes = base64.b64decode(image_b64)
-                (IMAGES_DIR / f"{slug}.png").write_bytes(img_bytes)
+                if image_b64:
+                    if image_b64.startswith('http://') or image_b64.startswith('https://'):
+                        print(f"[images_2D] Downloading from URL: {image_b64}", flush=True)
+                        req = urllib.request.Request(
+                            image_b64,
+                            headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
+                        )
+                        with urllib.request.urlopen(req) as response:
+                            img_bytes = response.read()
+                    else:
+                        img_bytes = base64.b64decode(image_b64)
+                    (IMAGES_DIR / f"{slug}.png").write_bytes(img_bytes)
 
-            # Save prompt as .txt
-            if prompt:
-                (IMAGES_DIR / f"{slug}.txt").write_text(prompt, encoding='utf-8')
+                if prompt:
+                    (IMAGES_DIR / f"{slug}.txt").write_text(prompt, encoding='utf-8')
 
-            print(f"[images_2D] Saved {slug}.png + .txt", flush=True)
-            resp = json.dumps({'status': 'ok', 'slug': slug}).encode()
-            self._cors(200, resp)
+                print(f"[images_2D] Saved {slug}.png + .txt", flush=True)
+                resp = json.dumps({'status': 'ok', 'slug': slug}).encode()
+                self._cors(200, resp)
 
-        except Exception as exc:
-            print(f"[images_2D] Save error: {exc}", flush=True)
+            except Exception as exc:
+                print(f"[images_2D] Save error: {exc}", flush=True)
+                self._cors(500, json.dumps({'error': str(exc)}).encode())
+
+        elif self.path == '/generate-3d':
+            try:
+                length = int(self.headers.get('Content-Length', 0))
+                body   = json.loads(self.rfile.read(length))
+
+                image_b64 = body.get('image_b64', '')
+                remove_bg = body.get('remove_bg', True)
+                animal    = body.get('animal', 'animal').strip()
+                theme     = body.get('theme', 'chibi').strip()
+
+                animal_clean = re.sub(r'[^a-zA-Z0-9_]', '', animal.replace(" ", "_")).lower()
+                theme_clean = re.sub(r'[^a-zA-Z0-9_]', '', theme.replace(" ", "_")).lower()
+
+                outputs_dir = BASE_DIR / "frontend" / "outputs"
+                outputs_dir.mkdir(parents=True, exist_ok=True)
+
+                pattern = re.compile(rf"^{re.escape(animal_clean)}_{re.escape(theme_clean)}_(\d+)$")
+                max_num = 0
+                for entry in os.listdir(outputs_dir):
+                    if os.path.isdir(outputs_dir / entry):
+                        match = pattern.match(entry)
+                        if match:
+                            num = int(match.group(1))
+                            if num > max_num:
+                                max_num = num
+
+                folder_number = max_num + 1
+                folder_name = f"{animal_clean}_{theme_clean}_{folder_number}"
+                folder_path = outputs_dir / folder_name
+                folder_path.mkdir(parents=True, exist_ok=True)
+
+                img_bytes = base64.b64decode(image_b64)
+                (folder_path / "input.png").write_bytes(img_bytes)
+                print(f"[generate-3d] Created folder {folder_name} and saved input.png", flush=True)
+
+                api_url = GLOBAL_API_URL or "https://trellis-deployment.modal.run"
+                print(f"[generate-3d] Forwarding to Modal: {api_url}/generate", flush=True)
+                
+                payload, content_type = build_multipart_payload(img_bytes, remove_bg, animal, theme)
+                
+                req = urllib.request.Request(f"{api_url}/generate", data=payload, headers={
+                    'Content-Type': content_type,
+                    'Content-Length': str(len(payload))
+                }, method="POST")
+                
+                with urllib.request.urlopen(req) as resp:
+                    resp_data = json.loads(resp.read().decode('utf-8'))
+                    call_id = resp_data.get('call_id')
+                    
+                print(f"[generate-3d] Modal started generation, call_id: {call_id}", flush=True)
+                
+                threading.Thread(
+                    target=run_animation_pipeline_background,
+                    args=(api_url, call_id, folder_path, animal_clean, theme_clean, folder_number),
+                    daemon=True
+                ).start()
+                
+                self._cors(200, json.dumps({'success': True, 'call_id': call_id}).encode())
+
+            except Exception as exc:
+                print(f"[generate-3d] Error: {exc}", flush=True)
+                import traceback
+                traceback.print_exc()
+                self._cors(500, json.dumps({'error': str(exc)}).encode())
+
+        else:
+            self._cors(404)
             self._cors(500, json.dumps({'error': str(exc)}).encode())
 
     # ── Helpers ───────────────────────────────────────────────────────────────
@@ -277,9 +565,30 @@ def deploy_backends_to_modal():
         print(f"\n[+] {name} Deployment successful! Backend API: {url}", flush=True)
         api_urls[name] = url
         
+    print("\n[+] Deploying AnimationMerger (tests/successful/merge_animations.py) to Modal...", flush=True)
+    process_merger = subprocess.Popen(
+        [sys.executable, "-m", "modal", "deploy", "tests/successful/merge_animations.py"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1
+    )
+    for line in process_merger.stdout:
+        print(line, end="", flush=True)
+    process_merger.wait()
+    
+    if process_merger.returncode == 0:
+        print("\n[+] AnimationMerger deployment successful!", flush=True)
+    else:
+        print("\n[-] AnimationMerger deployment failed (will fallback to on-the-fly run).", flush=True)
+        
     return api_urls
 
 def launch_local_servers(api_url, rig_api_url):
+    global GLOBAL_API_URL, GLOBAL_RIG_URL
+    GLOBAL_API_URL = api_url
+    GLOBAL_RIG_URL = rig_api_url
+
     print("\n========================================", flush=True)
     print("   Launching Local Servers...           ", flush=True)
     print("========================================", flush=True)

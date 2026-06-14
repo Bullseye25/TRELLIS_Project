@@ -93,12 +93,21 @@ try:
                 full_spine.append(next_bone)
                 cur = next_bone
 
-            # Label the spine chain: Spine, Spine1, Spine2, Neck, Head
-            spine_labels = ["mixamorig:Spine", "mixamorig:Spine1", "mixamorig:Spine2",
-                            "mixamorig:Neck", "mixamorig:Head"]
-            for i, b in enumerate(full_spine[1:]):
-                if i < len(spine_labels):
-                    mapping[b.name] = spine_labels[i]
+            # Label the spine chain: Head is always the last bone, Neck is its parent, and others are Spines
+            if len(full_spine) >= 2:
+                head_bone = full_spine[-1]
+                neck_bone = full_spine[-2]
+                mapping[head_bone.name] = "mixamorig:Head"
+                mapping[neck_bone.name] = "mixamorig:Neck"
+                
+                # Label intermediate bones as Spine, Spine1, Spine2
+                intermediate_spines = full_spine[1:-2]
+                spine_labels = ["mixamorig:Spine", "mixamorig:Spine1", "mixamorig:Spine2"]
+                for i, b in enumerate(intermediate_spines):
+                    if i < len(spine_labels):
+                        mapping[b.name] = spine_labels[i]
+                    else:
+                        mapping[b.name] = "mixamorig:Spine2"
 
             # Identify chest: first spine bone that has lateral arm branches (|x-rx| > 0.02)
             chest = full_spine[-1]
@@ -566,23 +575,11 @@ def upload_file_to_volume(filename: str, file_bytes: bytes):
 
 @app.function(volumes={"/outputs": trellis_outputs_vol})
 def delete_glb_files():
-    import os
-    trellis_outputs_vol.reload()
-    deleted = []
-    for f in os.listdir("/outputs"):
-        if f.endswith(".glb"):
-            try:
-                os.remove(os.path.join("/outputs", f))
-                deleted.append(f)
-            except Exception:
-                pass
-    if deleted:
-        trellis_outputs_vol.commit()
-        print(f"[+] Deleted GLB files from volume: {deleted}")
-    return deleted
+    # Disabled to avoid deleting active GLB assets
+    return []
 
 @app.local_entrypoint()
-def main(choice: str = None):
+def main(choice: str = None, no_download: bool = False):
     print("==================================================")
     print("   Universal Chibi Thinking Animation Generator   ")
     print("==================================================")
@@ -599,25 +596,27 @@ def main(choice: str = None):
     downloads_dir = os.path.expanduser("~/Downloads")
     anim_filename = "idle.fbx"
     
-    # Clean up local GLB files in Downloads folder on start
-    print("[+] Cleaning up local GLB files in Downloads folder...")
-    if os.path.exists(downloads_dir):
-        for f in os.listdir(downloads_dir):
-            if f.endswith(".glb"):
-                try:
-                    os.remove(os.path.join(downloads_dir, f))
-                    print(f"[+] Deleted local GLB: {f}")
-                except Exception:
-                    pass
+    # Clean up local GLB files in Downloads folder on start - DISABLED
+    # print("[+] Cleaning up local GLB files in Downloads folder...")
+    # if os.path.exists(downloads_dir):
+    #     for f in os.listdir(downloads_dir):
+    #         if f.endswith(".glb"):
+    #             try:
+    #                 os.remove(os.path.join(downloads_dir, f))
+    #                 print(f"[+] Deleted local GLB: {f}")
+    #             except Exception:
+    #                 pass
                     
     if use_modal:
-        print("[+] Checking and deleting GLB files on volume...")
-        try:
-            deleted_glbs = delete_glb_files.remote()
-            if deleted_glbs:
-                print(f"[+] Cleaned up GLB files: {deleted_glbs}")
-        except Exception as e:
-            print(f"[-] Warning: Failed to clean GLB files on volume: {e}")
+        # Delete any GLB files on the volume - DISABLED
+        # print("[+] Checking and deleting GLB files on volume...")
+        # try:
+        #     deleted_glbs = delete_glb_files.remote()
+        #     if deleted_glbs:
+        #         print(f"[+] Cleaned up GLB files: {deleted_glbs}")
+        # except Exception as e:
+        #     print(f"[-] Warning: Failed to clean GLB files on volume: {e}")
+        pass
             
         files = list_volume_files.remote()
         fbxs = [f for f in files if f.endswith(".fbx") and f.lower() not in ["idle.fbx", "walking.fbx"] and not f.endswith("_idle.fbx") and not f.endswith("_thinking.fbx") and not "/animation/" in f]
@@ -693,9 +692,12 @@ def main(choice: str = None):
                 print(f"\n>>> Processing {mesh_fbx} -> {output_name}...")
                 try:
                     animated_bytes = retarget_thinking_anim.remote(mesh_fbx, anim_filename)
-                    with open(local_dest, "wb") as f:
-                        f.write(animated_bytes)
-                    print(f"[+] Success! Downloaded to: {local_dest} ({len(animated_bytes):,} bytes)")
+                    if not no_download:
+                        with open(local_dest, "wb") as f:
+                            f.write(animated_bytes)
+                        print(f"[+] Success! Downloaded to: {local_dest} ({len(animated_bytes):,} bytes)")
+                    else:
+                        print(f"[+] Success! Retargeted thinking animation saved on Modal outputs volume.")
                 except Exception as e:
                     print(f"[-] Failed to process {mesh_fbx}: {e}")
     else:

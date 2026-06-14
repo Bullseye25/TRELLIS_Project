@@ -65,154 +65,94 @@ try:
         print("Bones do not have Mixamo naming. Applying conversion mapping...")
         
         def generate_mixamo_mapping(target_arm):
-            bones = target_arm.data.bones
             mapping = {}
-            
-            # Identify Center, Left, and Right bones
-            center_bones = []
-            left_bones = []
-            right_bones = []
-            
-            for b in bones:
-                if b.name.endswith("_end") or "_end_" in b.name.lower():
-                    continue
-                head = b.head_local
-                if head.x > 0.005:
-                    left_bones.append(b)
-                elif head.x < -0.005:
-                    right_bones.append(b)
-                else:
-                    center_bones.append(b)
-                    
-            # Sort Center bones by Z coordinate (bottom to top)
-            center_bones = sorted(center_bones, key=lambda b: b.head_local.z)
-            
-            # Filter out root/ground locator bone at the origin
-            if len(center_bones) > 1:
-                first = center_bones[0]
-                second = center_bones[1]
-                if not first.parent and len(first.children) == 1 and first.children[0] == second:
-                    center_bones.pop(0)
-                    
-            if not center_bones:
+            bones = target_arm.data.bones
+            all_bones = [b for b in bones if not b.name.endswith("_end")]
+
+            # Find root bone (no parent)
+            roots = [b for b in all_bones if b.parent is None]
+            if not roots:
                 return {}
-                
-            hips_bone = center_bones[0]
-            mapping[hips_bone.name] = "mixamorig:Hips"
-            
-            # The remaining center bones sorted by Z: Spine, Spine1, Spine2, Neck, Head
-            head_bone = center_bones[-1]
-            mapping[head_bone.name] = "mixamorig:Head"
-            
-            neck_bone = head_bone.parent
-            if neck_bone and neck_bone in center_bones:
-                mapping[neck_bone.name] = "mixamorig:Neck"
-            else:
-                neck_bone = center_bones[-2] if len(center_bones) > 2 else None
-                if neck_bone:
-                    mapping[neck_bone.name] = "mixamorig:Neck"
-                    
-            neck_idx = center_bones.index(neck_bone) if neck_bone in center_bones else len(center_bones) - 1
-            spine_bones = center_bones[1:neck_idx]
-            
-            if len(spine_bones) == 1:
-                mapping[spine_bones[0].name] = "mixamorig:Spine"
-            elif len(spine_bones) == 2:
-                mapping[spine_bones[0].name] = "mixamorig:Spine"
-                mapping[spine_bones[1].name] = "mixamorig:Spine2"
-            elif len(spine_bones) >= 3:
-                mapping[spine_bones[0].name] = "mixamorig:Spine"
-                mapping[spine_bones[1].name] = "mixamorig:Spine1"
-                mapping[spine_bones[2].name] = "mixamorig:Spine2"
-                for extra in spine_bones[3:]:
-                    mapping[extra.name] = "mixamorig:Spine2"
-                    
-            # Identify legs (below hips Z)
-            z_hips = hips_bone.head_local.z
-            
-            left_leg_bones = [b for b in left_bones if b.head_local.z < z_hips]
-            left_leg_bones = sorted(left_leg_bones, key=lambda b: b.head_local.z, reverse=True)
-            
-            right_leg_bones = [b for b in right_bones if b.head_local.z < z_hips]
-            right_leg_bones = sorted(right_leg_bones, key=lambda b: b.head_local.z, reverse=True)
-            
-            leg_names = ["mixamorig:LeftUpLeg", "mixamorig:LeftLeg", "mixamorig:LeftFoot", "mixamorig:LeftToeBase"]
-            for i, b in enumerate(left_leg_bones[:len(leg_names)]):
-                mapping[b.name] = leg_names[i]
-                
-            r_leg_names = ["mixamorig:RightUpLeg", "mixamorig:RightLeg", "mixamorig:RightFoot", "mixamorig:RightToeBase"]
-            for i, b in enumerate(right_leg_bones[:len(r_leg_names)]):
-                mapping[b.name] = r_leg_names[i]
-                
-            # Identify arms and fingers
-            left_upper = [b for b in left_bones if b.head_local.z >= z_hips - 0.1]
-            if left_upper:
-                left_arm_start = min(left_upper, key=lambda b: b.head_local.x)
-                left_arm_chain = [left_arm_start]
-                curr = left_arm_start
-                while len(left_arm_chain) < 4:
-                    children = [c for c in curr.children if c in left_upper]
-                    if len(children) >= 1:
-                        curr = children[0]
-                        left_arm_chain.append(curr)
-                    else:
+            root = roots[0]
+            mapping[root.name] = "mixamorig:Hips"
+            rx = root.head_local.x  # X reference for left/right detection
+
+            # Walk the FULL center spine upward to the head.
+            # At each step: pick the child most central to root-X that goes upward in Z.
+            # This correctly skips leg branches (which go down) off the hips.
+            full_spine = [root]
+            cur = root
+            while True:
+                kids = [c for c in cur.children if not c.name.endswith("_end")]
+                upward_center = [c for c in kids
+                                 if c.head_local.z >= cur.head_local.z - 0.01
+                                 and abs(c.head_local.x - rx) < 0.05]
+                if not upward_center:
+                    break
+                next_bone = min(upward_center, key=lambda c: abs(c.head_local.x - rx))
+                full_spine.append(next_bone)
+                cur = next_bone
+
+            # Label the spine chain: Spine, Spine1, Spine2, Neck, Head
+            spine_labels = ["mixamorig:Spine", "mixamorig:Spine1", "mixamorig:Spine2",
+                            "mixamorig:Neck", "mixamorig:Head"]
+            for i, b in enumerate(full_spine[1:]):
+                if i < len(spine_labels):
+                    mapping[b.name] = spine_labels[i]
+
+            # Identify chest: first spine bone that has lateral arm branches (|x-rx| > 0.02)
+            chest = full_spine[-1]
+            for b in full_spine[1:]:
+                arm_branches = [c for c in b.children
+                                if not c.name.endswith("_end")
+                                and abs(c.head_local.x - rx) > 0.02]
+                if arm_branches:
+                    chest = b
+                    break
+
+            # Helper: follow a linear chain of bones and assign labels
+            def follow_chain(start, labels):
+                chain = [start]
+                cur2 = start
+                while len(chain) < len(labels):
+                    kids = [c for c in cur2.children
+                            if not c.name.endswith("_end") and c.name not in mapping]
+                    if not kids:
                         break
-                        
-                if len(left_arm_chain) >= 4:
-                    mapping[left_arm_chain[0].name] = "mixamorig:LeftShoulder"
-                    mapping[left_arm_chain[1].name] = "mixamorig:LeftArm"
-                    mapping[left_arm_chain[2].name] = "mixamorig:LeftForeArm"
-                    mapping[left_arm_chain[3].name] = "mixamorig:LeftHand"
-                    for extra in left_arm_chain[4:]:
-                        mapping[extra.name] = "mixamorig:LeftHand"
-                elif len(left_arm_chain) == 3:
-                    mapping[left_arm_chain[0].name] = "mixamorig:LeftArm"
-                    mapping[left_arm_chain[1].name] = "mixamorig:LeftForeArm"
-                    mapping[left_arm_chain[2].name] = "mixamorig:LeftHand"
-                elif len(left_arm_chain) == 2:
-                    mapping[left_arm_chain[0].name] = "mixamorig:LeftArm"
-                    mapping[left_arm_chain[1].name] = "mixamorig:LeftHand"
-                    
-                left_hand_bone = left_arm_chain[3] if len(left_arm_chain) >= 4 else (left_arm_chain[2] if len(left_arm_chain) == 3 else left_arm_chain[-1])
-                
-                def map_descendants(bone, prefix):
-                    for i, child in enumerate(bone.children):
-                        if child.name not in mapping:
-                            mapping[child.name] = f"{prefix}Finger_{i}"
-                            map_descendants(child, f"{prefix}Finger_{i}")
-                map_descendants(left_hand_bone, "mixamorig:Left")
-                
-            right_upper = [b for b in right_bones if b.head_local.z >= z_hips - 0.1]
-            if right_upper:
-                right_arm_start = max(right_upper, key=lambda b: b.head_local.x)
-                right_arm_chain = [right_arm_start]
-                curr = right_arm_start
-                while len(right_arm_chain) < 4:
-                    children = [c for c in curr.children if c in right_upper]
-                    if len(children) >= 1:
-                        curr = children[0]
-                        right_arm_chain.append(curr)
-                    else:
-                        break
-                        
-                if len(right_arm_chain) >= 4:
-                    mapping[right_arm_chain[0].name] = "mixamorig:RightShoulder"
-                    mapping[right_arm_chain[1].name] = "mixamorig:RightArm"
-                    mapping[right_arm_chain[2].name] = "mixamorig:RightForeArm"
-                    mapping[right_arm_chain[3].name] = "mixamorig:RightHand"
-                    for extra in right_arm_chain[4:]:
-                        mapping[extra.name] = "mixamorig:RightHand"
-                elif len(right_arm_chain) == 3:
-                    mapping[right_arm_chain[0].name] = "mixamorig:RightArm"
-                    mapping[right_arm_chain[1].name] = "mixamorig:RightForeArm"
-                    mapping[right_arm_chain[2].name] = "mixamorig:RightHand"
-                elif len(right_arm_chain) == 2:
-                    mapping[right_arm_chain[0].name] = "mixamorig:RightArm"
-                    mapping[right_arm_chain[1].name] = "mixamorig:RightHand"
-                    
-                right_hand_bone = right_arm_chain[3] if len(right_arm_chain) >= 4 else (right_arm_chain[2] if len(right_arm_chain) == 3 else right_arm_chain[-1])
-                map_descendants(right_hand_bone, "mixamorig:Right")
-                
+                    cur2 = min(kids, key=lambda c: len(c.children))
+                    chain.append(cur2)
+                for i, b in enumerate(chain):
+                    if i < len(labels):
+                        mapping[b.name] = labels[i]
+
+            # Arms from chest (positive X = left, negative X = right)
+            chest_kids = [c for c in chest.children
+                          if not c.name.endswith("_end") and c.name not in mapping]
+            left_sh  = sorted([c for c in chest_kids if c.head_local.x > rx + 0.01],
+                              key=lambda c: -c.head_local.x)
+            right_sh = sorted([c for c in chest_kids if c.head_local.x < rx - 0.01],
+                              key=lambda c:  c.head_local.x)
+            if left_sh:
+                follow_chain(left_sh[0], ["mixamorig:LeftShoulder", "mixamorig:LeftArm",
+                                           "mixamorig:LeftForeArm",  "mixamorig:LeftHand"])
+            if right_sh:
+                follow_chain(right_sh[0], ["mixamorig:RightShoulder", "mixamorig:RightArm",
+                                            "mixamorig:RightForeArm",  "mixamorig:RightHand"])
+
+            # Legs from root (positive X = left, negative X = right)
+            hip_kids = [c for c in root.children
+                        if not c.name.endswith("_end") and c.name not in mapping]
+            left_leg  = sorted([c for c in hip_kids if c.head_local.x > rx + 0.01],
+                               key=lambda c: -c.head_local.x)
+            right_leg = sorted([c for c in hip_kids if c.head_local.x < rx - 0.01],
+                               key=lambda c:  c.head_local.x)
+            if left_leg:
+                follow_chain(left_leg[0], ["mixamorig:LeftUpLeg", "mixamorig:LeftLeg",
+                                            "mixamorig:LeftFoot",  "mixamorig:LeftToeBase"])
+            if right_leg:
+                follow_chain(right_leg[0], ["mixamorig:RightUpLeg", "mixamorig:RightLeg",
+                                             "mixamorig:RightFoot",  "mixamorig:RightToeBase"])
+
             return mapping
             
         mapping = generate_mixamo_mapping(target_arm)

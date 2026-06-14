@@ -1,14 +1,10 @@
-python3 -m modal run TRELLIS_Project/tests/successful/generate_procedural_walk.py
+cd "/Users/mac/Documents/Models Generator/TRELLIS_Project"
 
-
-python3 -m modal run TRELLIS_Project/tests/successful/apply_walk_animation.py --char 0 --anim 4
-
-python3 -m modal run TRELLIS_Project/tests/successful/run_universal_chibi_walk.py --char 0
-
-
-
-Also generate_procedural_walk.py is not good in creating animations
-
-
-Run this..
+# Step 1 – Walk animation
 python3 -m modal run tests/successful/run_universal_chibi_walk.py --choice 0
+
+# Step 2 – Idle animation  
+python3 -m modal run tests/successful/run_universal_chibi_idle.py --choice 0
+
+# Step 3 – Thinking animation
+python3 -m modal run tests/successful/run_universal_chibi_thinking.py --choice 0

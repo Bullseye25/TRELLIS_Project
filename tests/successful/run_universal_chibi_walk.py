@@ -3,7 +3,7 @@ import sys
 import subprocess
 import modal
 
-app = modal.App("universal-chibi-animator")
+app = modal.App("chibi-animator-walk")
 
 trellis_outputs_vol = modal.Volume.from_name("trellis-outputs", create_if_missing=True)
 convert_cache_vol  = modal.Volume.from_name("test-blender-cache", create_if_missing=True)
@@ -706,13 +706,40 @@ def retarget_walk_anim(mesh_fbx: str, anim_fbx: str) -> bytes:
     trellis_outputs_vol.reload()
     
     target_path = f"/outputs/{mesh_fbx}"
-    source_path = f"/outputs/{anim_fbx}"
     output_path = f"/cache/walk_retargeted_{mesh_fbx}"
     
     if not os.path.exists(target_path):
         raise FileNotFoundError(f"Target model {mesh_fbx} not found on volume.")
-    if not os.path.exists(source_path):
-        raise FileNotFoundError(f"Source animation {anim_fbx} not found on volume.")
+
+    # Resolve anim_fbx case-insensitively
+    resolved_anim_fbx = None
+    if os.path.exists(f"/outputs/{anim_fbx}"):
+        resolved_anim_fbx = anim_fbx
+    else:
+        if os.path.exists("/outputs"):
+            for f in os.listdir("/outputs"):
+                if f.lower() == anim_fbx.lower():
+                    resolved_anim_fbx = f
+                    break
+                    
+    # Fallback checks if requested file is missing
+    if resolved_anim_fbx is None:
+        print(f"WARNING: Source animation {anim_fbx} not found on volume. Looking for fallbacks...")
+        fallbacks_to_check = ["Walking.fbx", "idle.fbx", "walk.fbx"]
+        if os.path.exists("/outputs"):
+            for fallback in fallbacks_to_check:
+                for f in os.listdir("/outputs"):
+                    if f.lower() == fallback.lower():
+                        resolved_anim_fbx = f
+                        print(f"Using fallback animation: {resolved_anim_fbx}")
+                        break
+                if resolved_anim_fbx is not None:
+                    break
+
+    if resolved_anim_fbx is None:
+        raise FileNotFoundError(f"Source animation {anim_fbx} not found on volume and no fallback was found.")
+
+    source_path = f"/outputs/{resolved_anim_fbx}"
 
     print(f"Retargeting walk animation {anim_fbx} onto {mesh_fbx}...")
     

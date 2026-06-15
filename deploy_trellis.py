@@ -249,6 +249,16 @@ try:
             neck_bone = head_bone.parent
             if neck_bone and neck_bone in center_bones:
                 mapping[neck_bone.name] = "mixamorig:Neck"
+<<<<<<< Updated upstream
+=======
+                # Make sure the child of mixamorig:Neck is mixamorig:Head
+                neck_children = list(neck_bone.children)
+                if neck_children:
+                    head_bone = max(neck_children, key=lambda b: b.head_local.z)
+                    mapping[head_bone.name] = "mixamorig:Head"
+                else:
+                    mapping[fallback_head.name] = "mixamorig:Head"
+>>>>>>> Stashed changes
             else:
                 neck_bone = center_bones[-2] if len(center_bones) > 2 else None
                 if neck_bone:
@@ -1062,12 +1072,35 @@ class TrellisAPI:
         # Simplify mesh if needed
         mesh.simplify(16777216)
         
+<<<<<<< Updated upstream
         # Export GLB directly — no intermediate FBX conversion
         glb_path = f"/outputs/{output_filename}"
         temp_filename = f"temp_{output_filename}"
         temp_path = f"/outputs/{temp_filename}"
         
         print(f"Exporting raw GLB to Modal storage: {temp_path}...")
+=======
+        # --- GLB Naming Setup ---
+        prefix = os.path.splitext(output_filename)[0]
+        parts = prefix.split("_")
+        if len(parts) >= 3 and parts[-1].isdigit():
+            rand_num = int(parts[-1])
+            animal_clean = parts[0]
+            theme_clean = "_".join(parts[1:-1])
+        else:
+            rand_num = random.randint(10000, 99999)
+            animal_clean = "animal"
+            theme_clean = "custom"
+            prefix = f"{animal_clean}_{theme_clean}_{rand_num}"
+            
+        proper_glb_name = f"{prefix}.glb"
+        proper_glb_path = f"/outputs/{proper_glb_name}"
+        
+        temp_proper_glb_name = f"temp_{proper_glb_name}"
+        temp_proper_glb_path = f"/outputs/{temp_proper_glb_name}"
+        
+        print(f"Exporting raw GLB to Modal storage: {temp_proper_glb_path}...")
+>>>>>>> Stashed changes
         glb = o_voxel.postprocess.to_glb(
             vertices            =   mesh.vertices,
             faces               =   mesh.faces,
@@ -1164,17 +1197,94 @@ class TrellisAPI:
         # Commit outputs volume to ensure FBX and texture are saved
         outputs_vol.commit()
         
+<<<<<<< Updated upstream
         response_dict = {
             "status": "success",
             "model_url": f"/download/{output_filename}"
+=======
+        write_status("3D model updated")
+        
+        # --- Run Retargeting Animations in Parallel directly on Modal ---
+        write_status("creating and applying animations...")
+        try:
+            print("Invoking parallel retargeting on Modal...", flush=True)
+            import concurrent.futures
+            
+            walk_fn = modal.Function.from_name("chibi-animator-walk", "retarget_walk_anim")
+            idle_fn = modal.Function.from_name("chibi-animator-idle", "retarget_idle_anim")
+            thinking_fn = modal.Function.from_name("chibi-animator-thinking", "retarget_thinking_anim")
+            
+            def run_walk():
+                return walk_fn.remote(fbx_filename, "Walking.fbx")
+                
+            def run_idle():
+                return idle_fn.remote(fbx_filename, "Idle.fbx")
+                
+            def run_thinking():
+                return thinking_fn.remote(fbx_filename, "Thinking.fbx")
+                
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                futures = [
+                    executor.submit(run_walk),
+                    executor.submit(run_idle),
+                    executor.submit(run_thinking)
+                ]
+                concurrent.futures.wait(futures)
+                
+                # Check for exceptions
+                for fut in futures:
+                    if fut.exception():
+                        raise fut.exception()
+                        
+            print("Parallel retargeting complete!", flush=True)
+            
+        except Exception as retarget_err:
+            print(f"Error during parallel retargeting: {retarget_err}", flush=True)
+            write_status(f"Retargeting failed: {retarget_err}", "error")
+            raise retarget_err
+
+        # --- Invoke merge_animations on Modal ---
+        write_status("will be finishing up soon...")
+        try:
+            print("Invoking merge_anims on Modal...", flush=True)
+            merge_fn = modal.Function.from_name("animation-merger", "merge_anims")
+            
+            walk_cache_fbx = f"walk_retargeted_{fbx_filename}"
+            idle_outputs_fbx = f"{animal_clean}_{theme_clean}_{rand_num}_idle.fbx"
+            thinking_outputs_fbx = f"{animal_clean}_{theme_clean}_{rand_num}_thinking.fbx"
+            merged_outputs_fbx = f"{animal_clean}_{theme_clean}_{rand_num}_animated.fbx"
+            
+            merge_fn.remote("", walk_cache_fbx, idle_outputs_fbx, thinking_outputs_fbx, merged_outputs_fbx)
+            print("Merging complete!", flush=True)
+            
+        except Exception as merge_err:
+            print(f"Error during merging: {merge_err}", flush=True)
+            write_status(f"Merging failed: {merge_err}", "error")
+            raise merge_err
+
+        # (Automatic intermediate cleanup removed)
+
+        outputs_vol.reload()
+        
+        # Save input image for gallery thumbnail
+        input_image_name = f"{animal_clean}_{theme_clean}_{rand_num}_input.png"
+        try:
+            img.save(f"/outputs/{input_image_name}")
+            outputs_vol.commit()
+            print(f"Saved input image thumbnail: {input_image_name}")
+        except Exception as img_err:
+            print(f"Warning: Failed to save input image thumbnail: {img_err}")
+
+        proper_animated_glb_name = f"{animal_clean}_{theme_clean}_{rand_num}_animated.glb"
+        response_dict = {
+            "status": "success",
+            "model_url": f"/download/{proper_glb_name}",
+            "animated_glb_url": f"/download/{proper_animated_glb_name}",
+            "fbx_url": f"/download/{merged_outputs_fbx}",
+            "texture_url": f"/download/{texture_filename}"
+>>>>>>> Stashed changes
         }
         
-        # Add urls if the files were generated successfully
-        if os.path.exists(fbx_path):
-            response_dict["fbx_url"] = f"/download/{fbx_filename}"
-        if os.path.exists(f"/outputs/{texture_filename}"):
-            response_dict["texture_url"] = f"/download/{texture_filename}"
-            
         return response_dict
 
 
@@ -1190,7 +1300,36 @@ def health():
 
 @fastapi_app.post("/warmup")
 def warmup():
-    TrellisAPI().warmup.remote()
+    # Warm up Trellis itself
+    TrellisAPI().warmup.spawn()
+    
+    # Warm up other deployed Modal functions concurrently by spawning background calls
+    try:
+        rig_fn = modal.Function.from_name("skintokens-deployment", "rig_glb")
+        rig_fn.spawn("", "")
+    except Exception:
+        pass
+        
+    try:
+        walk_fn = modal.Function.from_name("chibi-animator-walk", "list_volume_files")
+        walk_fn.spawn()
+    except Exception:
+        pass
+        
+    try:
+        idle_fn = modal.Function.from_name("chibi-animator-idle", "list_volume_files")
+        idle_fn.spawn()
+    except Exception:
+        pass
+        
+    try:
+        thinking_fn = modal.Function.from_name("chibi-animator-thinking", "list_volume_files")
+        thinking_fn.spawn()
+    except Exception:
+        pass
+        
+        # (Automatic volume cleanup warmup removed)
+        
     return {"status": "warmed_up"}
 
 @fastapi_app.post("/api/generate-2d")
@@ -1331,6 +1470,114 @@ def generate_3d(
         print("Error in 3D generation:", e)
         raise HTTPException(status_code=500, detail=str(e))
 
+class Generate3DRequest(BaseModel):
+    image_b64: str
+    remove_bg: bool = True
+    animal: str = "animal"
+    theme: str = "chibi"
+
+@fastapi_app.post("/generate-3d")
+def generate_3d_json(req: Generate3DRequest):
+    try:
+        import base64
+        import uuid
+        import random
+        import re
+        contents = base64.b64decode(req.image_b64)
+        
+        # Determine human-readable prefix immediately
+        animal_val = req.animal if req.animal else "animal"
+        theme_val = req.theme if req.theme else "custom"
+        animal_clean = re.sub(r'[^a-zA-Z0-9_]', '', animal_val.replace(" ", "_")).lower()
+        theme_clean = re.sub(r'[^a-zA-Z0-9_]', '', theme_val.replace(" ", "_")).lower()
+        rand_num = random.randint(10000, 99999)
+        prefix = f"{animal_clean}_{theme_clean}_{rand_num}"
+        
+        # Save input image thumbnail immediately for the gallery placeholder
+        input_image_name = f"{prefix}_input.png"
+        with open(f"/outputs/{input_image_name}", "wb") as f:
+            f.write(contents)
+            
+        # Spawn asynchronously to avoid HTTP timeouts during generation
+        call = TrellisAPI().process_image.spawn(contents, f"{prefix}.glb", req.remove_bg, animal=req.animal, theme=req.theme)
+        
+        # Write call_id -> prefix map file to volume
+        map_filename = f"map_{call.object_id}.txt"
+        with open(f"/outputs/{map_filename}", "w") as f:
+            f.write(prefix)
+            
+        # Initialize status file immediately
+        status_file = f"/outputs/{prefix}_status.json"
+        with open(status_file, "w") as f:
+            import json
+            json.dump({"status": "processing", "message": "3D model is in progress..."}, f)
+            
+        outputs_vol.commit()
+        
+        return JSONResponse(content={
+            "success": True,
+            "uid": prefix,
+            "call_id": call.object_id
+        })
+    except Exception as e:
+        print("Error in generate-3d:", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@fastapi_app.get("/list-generations")
+def list_generations():
+    outputs_vol.reload()
+    generations = {}
+    
+    for f in os.listdir("/outputs"):
+        # We only care about files with the pattern {animal}_{theme}_{rand_num}...
+        if f.endswith("_animated.glb"):
+            prefix = f[:-13] # strip "_animated.glb"
+            if prefix not in generations:
+                generations[prefix] = {}
+            generations[prefix]["animated_glb"] = f"outputs/{f}"
+            generations[prefix]["folder"] = prefix
+        elif f.endswith("_animated.fbx"):
+            prefix = f[:-13]
+            if prefix not in generations:
+                generations[prefix] = {}
+            generations[prefix]["fbx"] = f"outputs/{f}"
+            generations[prefix]["folder"] = prefix
+        elif f.endswith("_texture.png"):
+            prefix = f[:-12]
+            if prefix not in generations:
+                generations[prefix] = {}
+            generations[prefix]["texture"] = f"outputs/{f}"
+            generations[prefix]["folder"] = prefix
+        elif f.endswith("_input.png"):
+            prefix = f[:-10]
+            if prefix not in generations:
+                generations[prefix] = {}
+            generations[prefix]["image"] = f"outputs/{f}"
+            generations[prefix]["folder"] = prefix
+        elif f.endswith(".glb") and not f.endswith("_animated.glb") and not f.startswith("temp_"):
+            prefix = f[:-4]
+            if prefix not in generations:
+                generations[prefix] = {}
+            generations[prefix]["glb"] = f"outputs/{f}"
+            generations[prefix]["folder"] = prefix
+
+    # Convert to list and filter out incomplete ones
+    gen_list = []
+    for prefix, data in generations.items():
+        if data.get("glb") or data.get("animated_glb") or data.get("fbx") or data.get("image"):
+            gen_list.append({
+                "folder": data.get("folder", prefix),
+                "glb": data.get("glb"),
+                "animated_glb": data.get("animated_glb"),
+                "fbx": data.get("fbx"),
+                "texture": data.get("texture"),
+                "image": data.get("image")
+            })
+            
+    gen_list.sort(key=lambda g: g["folder"], reverse=True)
+    return gen_list
+
+@fastapi_app.get("/status-3d/{call_id}")
 @fastapi_app.get("/status/{call_id}")
 def check_status(call_id: str):
     from modal.functions import FunctionCall
@@ -1341,6 +1588,7 @@ def check_status(call_id: str):
         return {
             "status": "success",
             "asset_url": result["model_url"],
+            "animated_glb_url": result.get("animated_glb_url"),
             "fbx_url": result.get("fbx_url"),
             "texture_url": result.get("texture_url")
         }
@@ -1349,6 +1597,26 @@ def check_status(call_id: str):
         return {"status": "processing"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+@fastapi_app.get("/outputs/{entry}/{filename}")
+def download_outputs_file(entry: str, filename: str):
+    outputs_vol.reload()
+    file_path = f"/outputs/{filename}"
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Requested asset file not found")
+    
+    from fastapi.responses import FileResponse
+    return FileResponse(file_path, media_type="application/octet-stream", filename=filename)
+
+@fastapi_app.get("/outputs/{filename}")
+def download_outputs_flat_file(filename: str):
+    outputs_vol.reload()
+    file_path = f"/outputs/{filename}"
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Requested asset file not found")
+    
+    from fastapi.responses import FileResponse
+    return FileResponse(file_path, media_type="application/octet-stream", filename=filename)
 
 @fastapi_app.get("/download/{filename}")
 def download_file(filename: str):
@@ -1361,16 +1629,62 @@ def download_file(filename: str):
     from fastapi.responses import FileResponse
     return FileResponse(file_path, media_type="application/octet-stream", filename=filename)
 
+@fastapi_app.post("/cleanup")
+@fastapi_app.get("/cleanup")
 @fastapi_app.delete("/cleanup")
 def cleanup_outputs():
     try:
         outputs_vol.reload()
+        deleted = []
         for filename in os.listdir("/outputs"):
-            os.remove(os.path.join("/outputs", filename))
+            if filename.lower() in ["walking.fbx", "idle.fbx", "thinking.fbx"]:
+                continue
+            path = os.path.join("/outputs", filename)
+            try:
+                if os.path.isdir(path):
+                    import shutil
+                    shutil.rmtree(path)
+                else:
+                    os.remove(path)
+                deleted.append(filename)
+            except Exception as e:
+                print(f"Error deleting {filename}: {e}")
         outputs_vol.commit()
-        return {"status": "success"}
+        return {"status": "success", "deleted": deleted}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@fastapi_app.get("/animals.json")
+def serve_animals():
+    return [
+      "Panda", "Rabbit", "Cat", "Dog", "Fox", "Bear", "Tiger", "Crocodile",
+      "Penguin", "Lion", "Koala", "Deer", "Monkey", "Sloth", "Owl"
+    ]
+
+@fastapi_app.get("/themes.json")
+def serve_themes():
+    cats = get_themes()
+    # Convert dictionary to list format for C# JsonUtility parsing compatibility
+    cats_list = []
+    for k, v in cats.items():
+        cats_list.append({
+            "id": str(k),
+            "name": v["name"],
+            "themes": v["themes"]
+        })
+    return cats_list
+
+@fastapi_app.get("/config.js")
+def serve_config():
+    openai_key = os.environ.get("OPENAI_API_KEY", "")
+    js_content = f"""
+const API_URL = 'https://ammadraza01--trellis-deployment-fastapi.modal.run';
+const RIG_API_URL = 'https://ammadraza01--skintokens-deployment-rig-api.modal.run';
+const OPENAI_API_KEY = '{openai_key}';
+const LOCAL_SAVE_URL = 'https://ammadraza01--trellis-deployment-fastapi.modal.run';
+"""
+    from fastapi.responses import Response
+    return Response(content=js_content, media_type="application/javascript")
 
 @app.function(image=trellis_image, volumes={"/outputs": outputs_vol}, secrets=secrets, memory=2048)
 @modal.asgi_app()
